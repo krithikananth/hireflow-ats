@@ -3,22 +3,23 @@ const router = express.Router();
 const User = require('../models/User');
 const { protect, authorize } = require('../middleware/auth');
 
-// @desc    Get all HR users in same company (for Employee to pick from)
+// @desc    Get all HR users (for Employee to pick from)
 // @route   GET /api/users/hr
 // @access  Auth (Employee)
 router.get('/hr', protect, async (req, res) => {
   try {
+    // Show ALL HR users so employees can assign candidates to any HR
     const hrUsers = await User.find({
-      companyId: req.user.companyId,
       role: 'HR'
-    }).select('name email lastActive');
+    }).select('name email lastActive companyId');
 
     const now = new Date();
     const data = hrUsers.map(hr => ({
       _id: hr._id,
       name: hr.name,
       email: hr.email,
-      isOnline: hr.lastActive && (now - hr.lastActive) < 5 * 60 * 1000, // active in last 5 min
+      companyId: hr.companyId,
+      isOnline: hr.lastActive && (now - hr.lastActive) < 5 * 60 * 1000,
       lastActive: hr.lastActive
     }));
 
@@ -33,7 +34,8 @@ router.get('/hr', protect, async (req, res) => {
 // @access  HR only
 router.get('/admin', protect, authorize('HR'), async (req, res) => {
   try {
-    const users = await User.find({ companyId: req.user.companyId })
+    // Admin sees ALL users across the system
+    const users = await User.find({})
       .select('name email role companyId lastActive createdAt');
 
     const now = new Date();
