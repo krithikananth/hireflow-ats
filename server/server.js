@@ -46,6 +46,22 @@ app.use((err, req, res, next) => {
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 HireFlow ATS Server running on port ${PORT}`);
 });
+
+server.on('error', (err) => {
+  if (err.code === 'EADDRINUSE') {
+    console.log(`⚠️ Port ${PORT} busy, trying ${PORT + 1}...`);
+    app.listen(PORT + 1, () => {
+      console.log(`🚀 HireFlow ATS Server running on port ${PORT + 1}`);
+    });
+  } else {
+    console.error(err);
+    process.exit(1);
+  }
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => { server.close(); process.exit(0); });
+process.on('SIGINT', () => { server.close(); process.exit(0); });
