@@ -8,6 +8,8 @@ import { STAGE_COLORS, PIPELINE_STAGES } from '../utils/constants';
 import toast from 'react-hot-toast';
 import { Plus, Search, Edit3, Trash2, ExternalLink, Eye, User, Mail, Phone, Star, MessageSquare, Calendar, Circle } from 'lucide-react';
 
+const inputClass = "w-full px-4 py-2.5 bg-surface-50 border border-surface-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400";
+
 const CandidatesPage = () => {
   const { user } = useAuth();
   const [candidates, setCandidates] = useState([]);
@@ -35,7 +37,6 @@ const CandidatesPage = () => {
     try {
       const promises = [api.get('/candidates'), api.get('/jobs')];
       if (isEmployee) promises.push(api.get('/users/hr'));
-      
       const results = await Promise.all(promises);
       setCandidates(results[0].data.data);
       setJobs(results[1].data.data);
@@ -46,13 +47,9 @@ const CandidatesPage = () => {
 
   const handleAdd = async (e) => {
     e.preventDefault();
+    if (isEmployee && !form.assignedHR) { toast.error('Please select an HR'); return; }
     try {
-      const payload = { ...form };
-      if (isEmployee && !payload.assignedHR) {
-        toast.error('Please select an HR');
-        return;
-      }
-      const res = await api.post('/candidates', payload);
+      const res = await api.post('/candidates', form);
       setCandidates([res.data.data, ...candidates]);
       setShowAddModal(false);
       setForm({ name: '', email: '', phone: '', resumeLink: '', jobId: '', assignedHR: '' });
@@ -114,43 +111,40 @@ const CandidatesPage = () => {
 
   if (loading) return <Layout><Loader size="lg" text="Loading candidates..." /></Layout>;
 
-  const inputClass = "w-full px-4 py-2.5 bg-surface-50 border border-surface-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400";
-
-  const FormFields = ({ onSubmit, label }) => (
+  // Inline form JSX to avoid focus issues
+  const renderForm = (onSubmit, label) => (
     <form onSubmit={onSubmit} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-surface-700 mb-1">Name *</label>
-          <input type="text" value={form.name} onChange={e => setForm({...form, name: e.target.value})} required className={inputClass} />
+          <input type="text" value={form.name} onChange={e => setForm(prev => ({...prev, name: e.target.value}))} required className={inputClass} placeholder="Full name" />
         </div>
         <div>
           <label className="block text-sm font-medium text-surface-700 mb-1">Email *</label>
-          <input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} required className={inputClass} />
+          <input type="email" value={form.email} onChange={e => setForm(prev => ({...prev, email: e.target.value}))} required className={inputClass} placeholder="email@example.com" />
         </div>
       </div>
       <div className="grid grid-cols-2 gap-4">
         <div>
           <label className="block text-sm font-medium text-surface-700 mb-1">Phone *</label>
-          <input type="text" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} required className={inputClass} />
+          <input type="text" value={form.phone} onChange={e => setForm(prev => ({...prev, phone: e.target.value}))} required className={inputClass} placeholder="9876543210" />
         </div>
         <div>
           <label className="block text-sm font-medium text-surface-700 mb-1">Resume Link</label>
-          <input type="url" value={form.resumeLink} onChange={e => setForm({...form, resumeLink: e.target.value})} className={inputClass} />
+          <input type="url" value={form.resumeLink} onChange={e => setForm(prev => ({...prev, resumeLink: e.target.value}))} className={inputClass} placeholder="https://..." />
         </div>
       </div>
       <div>
         <label className="block text-sm font-medium text-surface-700 mb-1">Job *</label>
-        <select value={form.jobId} onChange={e => setForm({...form, jobId: e.target.value})} required className={inputClass}>
+        <select value={form.jobId} onChange={e => setForm(prev => ({...prev, jobId: e.target.value}))} required className={inputClass}>
           <option value="">Select job</option>
           {jobs.map(j => <option key={j._id} value={j._id}>{j.title} — {j.department}</option>)}
         </select>
       </div>
-
-      {/* Employee must select an HR */}
       {isEmployee && (
         <div>
           <label className="block text-sm font-medium text-surface-700 mb-1">Assign to HR *</label>
-          <select value={form.assignedHR} onChange={e => setForm({...form, assignedHR: e.target.value})} required className={inputClass}>
+          <select value={form.assignedHR} onChange={e => setForm(prev => ({...prev, assignedHR: e.target.value}))} required className={inputClass}>
             <option value="">Select HR</option>
             {hrList.map(hr => (
               <option key={hr._id} value={hr._id}>
@@ -160,7 +154,6 @@ const CandidatesPage = () => {
           </select>
         </div>
       )}
-
       <button type="submit" className="w-full py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-xl font-semibold text-sm shadow-lg shadow-primary-500/25 hover:shadow-xl transition-all">{label}</button>
     </form>
   );
@@ -171,10 +164,7 @@ const CandidatesPage = () => {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
           <div>
             <h1 className="text-2xl font-bold text-surface-900">Candidates</h1>
-            <p className="text-surface-500 text-sm mt-1">
-              {filtered.length} candidates found
-              {isEmployee && ' (added by you)'}
-            </p>
+            <p className="text-surface-500 text-sm mt-1">{filtered.length} candidates found{isEmployee && ' (added by you)'}</p>
           </div>
           <button id="add-candidate-btn" onClick={() => { setForm({ name: '', email: '', phone: '', resumeLink: '', jobId: '', assignedHR: '' }); setShowAddModal(true); }}
             className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-xl font-semibold text-sm shadow-lg shadow-primary-500/25 hover:shadow-xl transition-all">
@@ -182,7 +172,6 @@ const CandidatesPage = () => {
           </button>
         </div>
 
-        {/* HR list for Employees */}
         {isEmployee && hrList.length > 0 && (
           <div className="bg-white rounded-2xl border border-surface-100 p-4 mb-6">
             <h3 className="text-sm font-semibold text-surface-700 mb-3">HR Team</h3>
@@ -209,7 +198,6 @@ const CandidatesPage = () => {
             <option value="">All Jobs</option>
             {jobs.map(j => <option key={j._id} value={j._id}>{j.title}</option>)}
           </select>
-          {/* Stage filter only for HR */}
           {isHR && (
             <select id="filter-stage" value={filterStage} onChange={e => setFilterStage(e.target.value)}
               className="px-4 py-2.5 bg-white border border-surface-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20">
@@ -282,12 +270,17 @@ const CandidatesPage = () => {
           </div>
         </div>
 
+        {/* Add Modal */}
         <Modal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title="Add New Candidate">
-          <FormFields onSubmit={handleAdd} label="Add Candidate" />
+          {renderForm(handleAdd, 'Add Candidate')}
         </Modal>
+
+        {/* Edit Modal */}
         <Modal isOpen={showEditModal} onClose={() => setShowEditModal(false)} title="Edit Candidate">
-          <FormFields onSubmit={handleEdit} label="Update Candidate" />
+          {renderForm(handleEdit, 'Update Candidate')}
         </Modal>
+
+        {/* Detail Modal */}
         <Modal isOpen={showDetailModal} onClose={() => { setShowDetailModal(false); setShowAddRound(false); }} title="Candidate Details" maxWidth="max-w-2xl">
           {selectedCandidate && (
             <div className="space-y-5">
@@ -315,14 +308,14 @@ const CandidatesPage = () => {
                   {showAddRound && (
                     <form onSubmit={handleAddRound} className="p-4 bg-surface-50 rounded-xl border mb-4 space-y-3">
                       <div className="grid grid-cols-2 gap-3">
-                        <input type="text" placeholder="Round Name" required value={roundForm.roundName} onChange={e => setRoundForm({...roundForm, roundName: e.target.value})} className="px-3 py-2 bg-white border border-surface-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
-                        <input type="text" placeholder="Interviewer" required value={roundForm.interviewerName} onChange={e => setRoundForm({...roundForm, interviewerName: e.target.value})} className="px-3 py-2 bg-white border border-surface-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
+                        <input type="text" placeholder="Round Name" required value={roundForm.roundName} onChange={e => setRoundForm(prev => ({...prev, roundName: e.target.value}))} className="px-3 py-2 bg-white border border-surface-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
+                        <input type="text" placeholder="Interviewer" required value={roundForm.interviewerName} onChange={e => setRoundForm(prev => ({...prev, interviewerName: e.target.value}))} className="px-3 py-2 bg-white border border-surface-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
-                        <input type="number" placeholder="Score (0-10)" min="0" max="10" required value={roundForm.score} onChange={e => setRoundForm({...roundForm, score: e.target.value})} className="px-3 py-2 bg-white border border-surface-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
-                        <input type="date" required value={roundForm.date} onChange={e => setRoundForm({...roundForm, date: e.target.value})} className="px-3 py-2 bg-white border border-surface-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
+                        <input type="number" placeholder="Score (0-10)" min="0" max="10" required value={roundForm.score} onChange={e => setRoundForm(prev => ({...prev, score: e.target.value}))} className="px-3 py-2 bg-white border border-surface-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
+                        <input type="date" required value={roundForm.date} onChange={e => setRoundForm(prev => ({...prev, date: e.target.value}))} className="px-3 py-2 bg-white border border-surface-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
                       </div>
-                      <textarea placeholder="Feedback" rows={2} value={roundForm.feedback} onChange={e => setRoundForm({...roundForm, feedback: e.target.value})} className="w-full px-3 py-2 bg-white border border-surface-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
+                      <textarea placeholder="Feedback" rows={2} value={roundForm.feedback} onChange={e => setRoundForm(prev => ({...prev, feedback: e.target.value}))} className="w-full px-3 py-2 bg-white border border-surface-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
                       <button type="submit" className="w-full py-2 bg-primary-500 text-white rounded-lg text-sm font-semibold hover:bg-primary-600">Save Round</button>
                     </form>
                   )}

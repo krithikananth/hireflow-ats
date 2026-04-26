@@ -32,7 +32,9 @@ const createJob = async (req, res) => {
 // @access  Auth
 const getJobs = async (req, res) => {
   try {
-    const jobs = await Job.find({ companyId: req.user.companyId })
+    // Employee sees all jobs, HR sees only their company's jobs
+    const filter = req.user.role === 'HR' ? { companyId: req.user.companyId } : {};
+    const jobs = await Job.find(filter)
       .populate('createdBy', 'name email')
       .sort('-createdAt');
 
