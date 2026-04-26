@@ -9,15 +9,13 @@ const connectDB = require('./config/db');
 // Load env vars
 dotenv.config();
 
-// Connect to database
-connectDB();
-
 const app = express();
 
 // Middleware
 app.use(cors({
   origin: [
     'http://localhost:5173',
+    'http://localhost:5174',
     process.env.CLIENT_URL
   ].filter(Boolean),
   credentials: true
@@ -45,23 +43,30 @@ app.use((err, req, res, next) => {
   });
 });
 
+// Start server AFTER DB connects
 const PORT = process.env.PORT || 5000;
-const server = app.listen(PORT, () => {
-  console.log(`🚀 HireFlow ATS Server running on port ${PORT}`);
-});
 
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.log(`⚠️ Port ${PORT} busy, trying ${PORT + 1}...`);
-    app.listen(PORT + 1, () => {
-      console.log(`🚀 HireFlow ATS Server running on port ${PORT + 1}`);
-    });
-  } else {
-    console.error(err);
-    process.exit(1);
-  }
-});
+const startServer = async () => {
+  await connectDB();
+  
+  const server = app.listen(PORT, () => {
+    console.log(`🚀 HireFlow ATS Server running on port ${PORT}`);
+  });
 
-// Graceful shutdown
-process.on('SIGTERM', () => { server.close(); process.exit(0); });
-process.on('SIGINT', () => { server.close(); process.exit(0); });
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.log(`⚠️ Port ${PORT} busy, trying ${Number(PORT) + 1}...`);
+      app.listen(Number(PORT) + 1, () => {
+        console.log(`🚀 HireFlow ATS Server running on port ${Number(PORT) + 1}`);
+      });
+    } else {
+      console.error(err);
+      process.exit(1);
+    }
+  });
+
+  process.on('SIGTERM', () => { server.close(); process.exit(0); });
+  process.on('SIGINT', () => { server.close(); process.exit(0); });
+};
+
+startServer();
