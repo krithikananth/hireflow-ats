@@ -1,52 +1,150 @@
-# HireFlow ATS — Recruitment Management System
+# HireFlow ATS — Applicant Tracking System
 
-A full-stack MERN-based recruitment management system with role-based access for HR and employees to manage hiring workflows, candidate pipelines, interview tracking, and dashboard analytics.
+> **Live Demo:** [https://hireflow-ats.vercel.app](https://hireflow-ats.vercel.app)
 
-## 🚀 Features
+A full-stack recruitment management system built with the **MERN Stack** (MongoDB, Express.js, React, Node.js). HireFlow enables HR teams and employees to collaboratively manage candidates through a structured hiring pipeline.
 
-- **Role-Based Authentication** — JWT auth with HR (Admin) and Employee (Coordinator) roles
-- **Job Management** — HR can create, edit, and manage job postings across departments
-- **Candidate Management** — Add, search, filter, and track candidates through the hiring pipeline
-- **Kanban Pipeline** — Drag-and-drop board with 7 stages (Applied → Selected/Rejected)
-- **Interview Tracking** — Round-wise scoring, feedback, and interviewer management (HR-only)
-- **Analytics Dashboard** — Real-time stats, pipeline overview, today's interviews, job-wise breakdown
-- **Responsive Design** — Mobile-first UI with modern glassmorphism and animations
+---
 
-## 🛠️ Tech Stack
+## 🔗 Links
 
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 18 + Vite + Tailwind CSS v4 |
-| Backend | Node.js + Express.js |
-| Database | MongoDB + Mongoose |
-| Auth | JWT |
-| Drag & Drop | @hello-pangea/dnd |
-| Icons | Lucide React |
-| Notifications | React Hot Toast |
+| Resource | URL |
+|----------|-----|
+| **Frontend (Vercel)** | [hireflow-ats.vercel.app](https://hireflow-ats.vercel.app) |
+| **Backend API (Render)** | [hireflow-ats-api.onrender.com](https://hireflow-ats-api.onrender.com) |
+| **GitHub Repo** | [github.com/krithikananth/hireflow-ats](https://github.com/krithikananth/hireflow-ats) |
+
+---
+
+## 🏗️ System Architecture
+
+```mermaid
+graph LR
+    A[React Frontend<br>Vercel] -->|API Calls| B[Express.js Backend<br>Render]
+    B -->|CRUD| C[MongoDB Atlas<br>Cloud Database]
+    B -->|JWT Auth| D[Authentication<br>Middleware]
+```
+
+---
+
+## 👥 Role-Based Access
+
+```mermaid
+graph TD
+    A[Login Page] --> B{Select Role}
+    B -->|HR Admin| C[Dashboard]
+    B -->|Employee| D[Candidates Page]
+    
+    C --> E[📊 Dashboard Stats]
+    C --> F[👥 Candidates + Stage Control]
+    C --> G[💼 Jobs Management]
+    C --> H[🔲 Pipeline View]
+    C --> I[🛡️ Admin Panel]
+    
+    D --> J[👥 View Own Candidates]
+    D --> K[➕ Add Candidate + Select HR]
+    D --> L[👁️ HR Team Online Status]
+```
+
+| Feature | HR | Employee |
+|---------|:--:|:--------:|
+| Dashboard & Stats | ✅ | ❌ |
+| Manage Candidates | ✅ (own assigned) | ✅ (add only) |
+| Move Pipeline Stages | ✅ (forward only) | ❌ |
+| View Interview Rounds | ✅ | ❌ |
+| Jobs Management | ✅ | ❌ |
+| Pipeline Kanban | ✅ | ❌ |
+| Admin Panel | ✅ | ❌ |
+| See HR Online Status | ❌ | ✅ |
+| Select HR for Candidate | ❌ | ✅ |
+
+---
+
+## 🔄 Candidate Lifecycle
+
+```mermaid
+graph LR
+    A[Applied] --> B[Screening]
+    B --> C[Technical Round 1]
+    C --> D[Technical Round 2]
+    D --> E[HR Round]
+    E --> F[✅ Selected]
+    
+    A --> G[❌ Rejected]
+    B --> G
+    C --> G
+    D --> G
+    E --> G
+    
+    style F fill:#10b981,color:#fff
+    style G fill:#ef4444,color:#fff
+```
+
+> **Rule:** HR can only move candidates **forward** — no going back to previous stages. Rejection is available at any stage.
+
+---
 
 ## 📁 Project Structure
 
 ```
 HireFlow-ATS/
-├── server/
-│   ├── config/db.js
-│   ├── middleware/auth.js
-│   ├── models/ (User, Job, Candidate, InterviewRound)
-│   ├── controllers/ (auth, job, candidate, interview, dashboard)
-│   ├── routes/ (auth, job, candidate, interview, dashboard)
-│   ├── server.js
-│   └── .env
-├── client/
-│   ├── src/
-│   │   ├── components/ (Sidebar, Layout, Modal, Loader, ProtectedRoute)
-│   │   ├── pages/ (Login, Dashboard, Candidates, Jobs, Pipeline)
-│   │   ├── context/AuthContext.jsx
-│   │   └── utils/ (api.js, constants.js)
-│   └── vite.config.js
+├── client/                    # React Frontend
+│   └── src/
+│       ├── components/        # Reusable UI (Sidebar, Modal, Layout, Loader)
+│       ├── context/           # AuthContext (login/signup/logout)
+│       ├── pages/             # LoginPage, Dashboard, Candidates, Jobs, Pipeline, Admin
+│       └── utils/             # API config, constants, stage colors
+│
+├── server/                    # Express.js Backend
+│   ├── config/db.js           # MongoDB connection with retry logic
+│   ├── controllers/           # Auth, Candidate, Job, Dashboard, Interview logic
+│   ├── middleware/auth.js     # JWT verification + online tracking
+│   ├── models/                # User, Candidate, Job, InterviewRound schemas
+│   ├── routes/                # Auth, Candidate, Job, Dashboard, Interview, User routes
+│   └── server.js              # Express server entry point
+│
 └── README.md
 ```
 
-## ⚡ Local Development
+---
+
+## 🔐 Authentication Flow
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant F as Frontend
+    participant B as Backend
+    participant DB as MongoDB
+    
+    U->>F: Enter email + password
+    F->>B: POST /api/auth/login
+    B->>DB: Find user, compare password
+    DB-->>B: User found
+    B-->>F: JWT token + user data
+    F->>F: Store token in localStorage
+    F->>F: Redirect to Dashboard/Candidates
+```
+
+---
+
+## 🛡️ HR Isolation
+
+```mermaid
+graph TD
+    A[Employee adds candidate] -->|Selects HR from dropdown| B[Candidate assigned to specific HR]
+    B --> C{Which HR is viewing?}
+    C -->|Assigned HR| D[✅ Visible in their list]
+    C -->|Other HR| E[❌ Not visible]
+```
+
+- Each HR **only sees candidates assigned to them**
+- Even if the same person applies for 2 roles under different HRs, each HR only sees their own
+- Employees see **only candidates they added** (basic info only — no stage/pipeline)
+
+---
+
+## 🚀 Quick Start
 
 ### Prerequisites
 - Node.js 18+
@@ -55,97 +153,92 @@ HireFlow-ATS/
 ### 1. Clone & Install
 
 ```bash
-git clone <repo-url>
-cd HireFlow-ATS
+git clone https://github.com/krithikananth/hireflow-ats.git
+cd hireflow-ats
 
-# Install server deps
-cd server
-npm install
+# Install backend
+cd server && npm install
 
-# Install client deps
-cd ../client
-npm install
+# Install frontend
+cd ../client && npm install
 ```
 
-### 2. Configure Environment
+### 2. Environment Variables
 
-Edit `server/.env`:
+**Server** (`server/.env`):
 ```env
-PORT=5000
-MONGO_URI=mongodb+srv://<username>:<password>@cluster0.mongodb.net/hireflow-ats
-JWT_SECRET=your_super_secret_key_here
-NODE_ENV=development
+MONGO_URI=mongodb+srv://<user>:<pass>@cluster.mongodb.net/hireflow-ats
+JWT_SECRET=your_secret_key
 CLIENT_URL=http://localhost:5173
+PORT=5000
 ```
 
-### 3. Run Development Servers
+**Client** (Vercel env or `.env`):
+```env
+VITE_API_URL=http://localhost:5000
+```
+
+### 3. Run Locally
 
 ```bash
 # Terminal 1 — Backend
-cd server
-npm run dev
+cd server && npm run dev
 
 # Terminal 2 — Frontend
-cd client
-npm run dev
+cd client && npm run dev
 ```
 
-- Frontend: http://localhost:5173
-- Backend: http://localhost:5000
+Open **http://localhost:5173**
 
-## 🚢 Deployment
+---
 
-### Frontend → Vercel
-
-1. Push code to GitHub
-2. Go to [vercel.com](https://vercel.com) → Import project
-3. Set root directory to `client`
-4. Build command: `npm run build`
-5. Output directory: `dist`
-6. Add environment variable:
-   ```
-   VITE_API_URL=https://your-backend.onrender.com
-   ```
-
-### Backend → Render
-
-1. Go to [render.com](https://render.com) → New Web Service
-2. Connect GitHub repo
-3. Set root directory to `server`
-4. Build command: `npm install`
-5. Start command: `node server.js`
-6. Add environment variables:
-   ```
-   PORT=5000
-   MONGO_URI=mongodb+srv://...
-   JWT_SECRET=your_secret
-   NODE_ENV=production
-   CLIENT_URL=https://your-app.vercel.app
-   ```
-
-### Database → MongoDB Atlas
-
-1. Go to [cloud.mongodb.com](https://cloud.mongodb.com)
-2. Create free M0 cluster
-3. Create database user
-4. Whitelist IP `0.0.0.0/0` (for Render)
-5. Copy connection string to `MONGO_URI`
-
-## 📝 API Endpoints
+## 📡 API Endpoints
 
 | Method | Endpoint | Access | Description |
 |--------|----------|--------|-------------|
-| POST | `/api/auth/signup` | Public | Register |
-| POST | `/api/auth/login` | Public | Login |
-| GET | `/api/auth/me` | Auth | Current user |
-| GET/POST | `/api/jobs` | Auth/HR | List/Create jobs |
-| PUT/DELETE | `/api/jobs/:id` | HR | Update/Delete job |
-| GET/POST | `/api/candidates` | Auth | List/Add candidates |
+| POST | `/api/auth/signup` | Public | Register user |
+| POST | `/api/auth/login` | Public | Login user |
+| GET | `/api/auth/me` | Auth | Get current user |
+| GET | `/api/candidates` | Auth | List candidates (role-filtered) |
+| POST | `/api/candidates` | Auth | Add candidate (duplicate email blocked) |
 | PUT | `/api/candidates/:id` | Auth | Update candidate |
-| PUT | `/api/candidates/:id/stage` | Auth | Update pipeline stage |
-| POST | `/api/interviews` | Auth | Add interview round |
-| GET | `/api/interviews/:candidateId` | HR | Get rounds (scores) |
-| GET | `/api/dashboard/stats` | Auth | Dashboard stats |
-| GET | `/api/dashboard/today` | Auth | Today's interviews |
-| GET | `/api/dashboard/pipeline` | Auth | Pipeline summary |
-| GET | `/api/dashboard/job-stats` | Auth | Job-wise counts |
+| PUT | `/api/candidates/:id/stage` | Auth | Move candidate stage (forward only) |
+| DELETE | `/api/candidates/:id` | HR | Delete candidate |
+| GET | `/api/jobs` | Auth | List jobs (deduplicated for Employee) |
+| POST | `/api/jobs` | HR | Create job |
+| GET | `/api/dashboard/stats` | HR | Dashboard stats |
+| GET | `/api/dashboard/pipeline` | HR | Pipeline summary |
+| GET | `/api/users/hr` | Auth | List all HRs with online status |
+| GET | `/api/users/admin` | HR | Admin panel — all users |
+
+---
+
+## 🛠️ Tech Stack
+
+| Layer | Technology |
+|-------|-----------|
+| Frontend | React 19, Vite, Tailwind CSS v4, React Router, Lucide Icons |
+| Backend | Node.js, Express.js, Mongoose, JWT, bcrypt |
+| Database | MongoDB Atlas |
+| Hosting | Vercel (frontend), Render (backend) |
+
+---
+
+## 📊 Admin Panel
+
+HR users can access the **Admin Panel** from the sidebar to view:
+- Total users, online count, HR/Employee breakdown
+- Each user's name, email, role, company ID
+- 🟢 Online / ⚫ Offline status (active in last 5 minutes)
+- Last active timestamp and join date
+
+**Database check** (terminal):
+```bash
+cd server && node admin-check.js
+```
+
+---
+
+## 📝 License
+
+MIT License — feel free to use and modify.
