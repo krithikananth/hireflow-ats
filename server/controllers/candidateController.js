@@ -8,6 +8,15 @@ const addCandidate = async (req, res) => {
   try {
     const { name, email, phone, resumeLink, jobId, assignedHR } = req.body;
 
+    // Check if candidate email already exists
+    const existing = await Candidate.findOne({ email });
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        message: 'A candidate with this email already exists'
+      });
+    }
+
     const candidate = await Candidate.create({
       name,
       email,

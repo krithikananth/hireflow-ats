@@ -180,7 +180,7 @@ const CandidatesPage = () => {
           </select>
         </div>
       )}
-      <button type="submit" className="w-full py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-xl font-semibold text-sm shadow-lg shadow-primary-500/25 hover:shadow-xl transition-all">{label}</button>
+      <button type="submit" className="w-full py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-xl font-semibold text-sm shadow-lg shadow-primary-500/25 hover:shadow-xl transition-all cursor-pointer">{label}</button>
     </form>
   );
 
