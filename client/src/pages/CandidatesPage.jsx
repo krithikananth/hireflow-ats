@@ -6,7 +6,18 @@ import Loader from '../components/Loader';
 import api from '../utils/api';
 import { STAGE_COLORS, PIPELINE_STAGES } from '../utils/constants';
 import toast from 'react-hot-toast';
-import { Plus, Search, Edit3, Trash2, ExternalLink, Eye, User, Mail, Phone, Star, MessageSquare, Calendar, Circle } from 'lucide-react';
+import { Plus, Search, Edit3, Trash2, ExternalLink, Eye, User, Mail, Phone, Star, MessageSquare, Calendar, Circle, ChevronDown } from 'lucide-react';
+
+// Get only forward stages from current stage (no going back)
+const getForwardStages = (currentStage) => {
+  // Stages in order (excluding Rejected — it's always available)
+  const orderedStages = ['Applied', 'Screening', 'Technical Round 1', 'Technical Round 2', 'HR Round', 'Selected'];
+  const currentIndex = orderedStages.indexOf(currentStage);
+  if (currentIndex === -1 || currentStage === 'Selected' || currentStage === 'Rejected') return [];
+  const forward = orderedStages.slice(currentIndex + 1);
+  forward.push('Rejected'); // Always allow rejection
+  return forward;
+};
 
 const inputClass = "w-full px-4 py-2.5 bg-surface-50 border border-surface-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400";
 
@@ -100,6 +111,14 @@ const CandidatesPage = () => {
       setRoundForm({ roundName: '', interviewerName: '', score: '', feedback: '', date: '' });
       toast.success('Round added!');
     } catch { toast.error('Failed'); }
+  };
+
+  const handleStageChange = async (candidateId, newStage) => {
+    try {
+      const res = await api.put(`/candidates/${candidateId}/stage`, { stage: newStage });
+      setCandidates(candidates.map(c => c._id === candidateId ? res.data.data : c));
+      toast.success(`Moved to ${newStage}`);
+    } catch { toast.error('Failed to update stage'); }
   };
 
   const filtered = candidates.filter(c => {
@@ -243,9 +262,26 @@ const CandidatesPage = () => {
                       </td>
                       {isHR && (
                         <td className="px-6 py-4">
-                          <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold ${sc?.bg} ${sc?.text} border ${sc?.border}`}>
-                            <span className={`w-1.5 h-1.5 rounded-full ${sc?.dot}`} />{c.currentStage}
-                          </span>
+                          <div className="flex items-center gap-2">
+                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold ${sc?.bg} ${sc?.text} border ${sc?.border}`}>
+                              <span className={`w-1.5 h-1.5 rounded-full ${sc?.dot}`} />{c.currentStage}
+                            </span>
+                            {getForwardStages(c.currentStage).length > 0 && (
+                              <div className="relative">
+                                <select
+                                  onChange={e => { if (e.target.value) { handleStageChange(c._id, e.target.value); e.target.value = ''; } }}
+                                  defaultValue=""
+                                  className="appearance-none pl-2 pr-6 py-1 bg-surface-50 border border-surface-200 rounded-lg text-xs text-surface-600 cursor-pointer hover:bg-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+                                >
+                                  <option value="" disabled>Move to →</option>
+                                  {getForwardStages(c.currentStage).map(s => (
+                                    <option key={s} value={s}>{s}</option>
+                                  ))}
+                                </select>
+                                <ChevronDown size={12} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-surface-400 pointer-events-none" />
+                              </div>
+                            )}
+                          </div>
                         </td>
                       )}
                       {isEmployee && (
