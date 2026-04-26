@@ -26,12 +26,14 @@ const LoginPage = () => {
     try {
       if (isSignup) {
         await signup(form.name, form.email, form.password, activeTab, form.companyId);
-        toast.success('Account created successfully!');
+        toast.success('Account created! Please sign in.');
+        setIsSignup(false);
+        setForm({ name: '', email: '', password: '', companyId: '' });
       } else {
         await login(form.email, form.password, activeTab);
         toast.success('Welcome back!');
+        navigate('/dashboard');
       }
-      navigate('/dashboard');
     } catch (error) {
       toast.error(error.response?.data?.message || 'Something went wrong');
     } finally {

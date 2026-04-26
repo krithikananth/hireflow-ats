@@ -20,7 +20,8 @@ const ProtectedRoute = ({ children, allowedRoles }) => {
   }
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/dashboard" replace />;
+    // Employee trying to access HR pages → redirect to candidates
+    return <Navigate to="/candidates" replace />;
   }
 
   return children;

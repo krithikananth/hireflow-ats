@@ -17,12 +17,14 @@ const Sidebar = () => {
     navigate('/login');
   };
 
-  const navItems = [
-    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { path: '/candidates', label: 'Candidates', icon: Users },
-    { path: '/jobs', label: 'Jobs', icon: Briefcase },
-    { path: '/pipeline', label: 'Pipeline', icon: Kanban },
+  const allNavItems = [
+    { path: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, roles: ['HR'] },
+    { path: '/candidates', label: 'Candidates', icon: Users, roles: ['HR', 'Employee'] },
+    { path: '/jobs', label: 'Jobs', icon: Briefcase, roles: ['HR'] },
+    { path: '/pipeline', label: 'Pipeline', icon: Kanban, roles: ['HR'] },
   ];
+
+  const navItems = allNavItems.filter(item => item.roles.includes(user?.role));
 
   const isActive = (path) => location.pathname === path;
 

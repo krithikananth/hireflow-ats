@@ -32,12 +32,8 @@ export const AuthProvider = ({ children }) => {
   };
 
   const signup = async (name, email, password, role, companyId) => {
-    const res = await api.post('/auth/signup', { name, email, password, role, companyId });
-    const { token, ...userData } = res.data.data;
-    localStorage.setItem('hireflow_token', token);
-    localStorage.setItem('hireflow_user', JSON.stringify(userData));
-    setUser(userData);
-    return userData;
+    await api.post('/auth/signup', { name, email, password, role, companyId });
+    return true;
   };
 
   const logout = () => {
