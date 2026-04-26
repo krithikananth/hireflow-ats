@@ -1,26 +1,27 @@
+const mongoose = require('mongoose');
 const Candidate = require('../models/Candidate');
 const InterviewRound = require('../models/InterviewRound');
 const Job = require('../models/Job');
 
 // @desc    Get dashboard stats
 // @route   GET /api/dashboard/stats
-// @access  Auth
+// @access  HR only
 const getStats = async (req, res) => {
   try {
     const companyId = req.user.companyId;
+    const hrId = req.user._id;
 
     const [totalCandidates, totalJobs, selectedCount, rejectedCount, stageCounts] = await Promise.all([
-      Candidate.countDocuments({ companyId }),
+      Candidate.countDocuments({ companyId, assignedHR: hrId }),
       Job.countDocuments({ companyId }),
-      Candidate.countDocuments({ companyId, currentStage: 'Selected' }),
-      Candidate.countDocuments({ companyId, currentStage: 'Rejected' }),
+      Candidate.countDocuments({ companyId, assignedHR: hrId, currentStage: 'Selected' }),
+      Candidate.countDocuments({ companyId, assignedHR: hrId, currentStage: 'Rejected' }),
       Candidate.aggregate([
-        { $match: { companyId } },
+        { $match: { companyId, assignedHR: new mongoose.Types.ObjectId(hrId) } },
         { $group: { _id: '$currentStage', count: { $sum: 1 } } }
       ])
     ]);
 
-    // Convert stage counts to object
     const stageMap = {};
     stageCounts.forEach(s => { stageMap[s._id] = s.count; });
 
@@ -44,7 +45,7 @@ const getStats = async (req, res) => {
 
 // @desc    Get today's interviews
 // @route   GET /api/dashboard/today
-// @access  Auth
+// @access  HR only
 const getTodayInterviews = async (req, res) => {
   try {
     const today = new Date();
@@ -53,7 +54,8 @@ const getTodayInterviews = async (req, res) => {
     tomorrow.setDate(tomorrow.getDate() + 1);
 
     const interviews = await InterviewRound.find({
-      date: { $gte: today, $lt: tomorrow }
+      date: { $gte: today, $lt: tomorrow },
+      createdBy: req.user._id
     })
       .populate({
         path: 'candidateId',
@@ -76,15 +78,16 @@ const getTodayInterviews = async (req, res) => {
   }
 };
 
-// @desc    Get pipeline summary (candidates per stage)
+// @desc    Get pipeline summary (HR's own candidates per stage)
 // @route   GET /api/dashboard/pipeline
-// @access  Auth
+// @access  HR only
 const getPipeline = async (req, res) => {
   try {
     const companyId = req.user.companyId;
+    const hrId = req.user._id;
 
     const pipeline = await Candidate.aggregate([
-      { $match: { companyId } },
+      { $match: { companyId, assignedHR: new mongoose.Types.ObjectId(hrId) } },
       {
         $group: {
           _id: '$currentStage',
@@ -114,13 +117,14 @@ const getPipeline = async (req, res) => {
 
 // @desc    Get job-wise candidate count
 // @route   GET /api/dashboard/job-stats
-// @access  Auth
+// @access  HR only
 const getJobStats = async (req, res) => {
   try {
     const companyId = req.user.companyId;
+    const hrId = req.user._id;
 
     const jobStats = await Candidate.aggregate([
-      { $match: { companyId } },
+      { $match: { companyId, assignedHR: new mongoose.Types.ObjectId(hrId) } },
       {
         $group: {
           _id: '$jobId',

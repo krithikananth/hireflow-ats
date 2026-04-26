@@ -30,6 +30,10 @@ const userSchema = new mongoose.Schema({
     type: String,
     required: [true, 'Company ID is required'],
     trim: true
+  },
+  lastActive: {
+    type: Date,
+    default: Date.now
   }
 }, {
   timestamps: true

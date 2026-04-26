@@ -14,7 +14,7 @@ const addCandidate = async (req, res) => {
       phone,
       resumeLink,
       jobId,
-      assignedHR,
+      assignedHR: assignedHR || req.user._id,
       addedBy: req.user._id,
       companyId: req.user.companyId,
       currentStage: 'Applied'
@@ -37,13 +37,21 @@ const addCandidate = async (req, res) => {
   }
 };
 
-// @desc    Get all candidates for company
+// @desc    Get candidates (role-based)
 // @route   GET /api/candidates
 // @access  Auth
 const getCandidates = async (req, res) => {
   try {
     const { stage, jobId, search } = req.query;
     const filter = { companyId: req.user.companyId };
+
+    if (req.user.role === 'HR') {
+      // HR only sees candidates assigned to them
+      filter.assignedHR = req.user._id;
+    } else {
+      // Employee only sees candidates they added
+      filter.addedBy = req.user._id;
+    }
 
     if (stage) filter.currentStage = stage;
     if (jobId) filter.jobId = jobId;
@@ -54,11 +62,28 @@ const getCandidates = async (req, res) => {
       ];
     }
 
-    const candidates = await Candidate.find(filter)
+    let query = Candidate.find(filter)
       .populate('jobId', 'title department')
       .populate('assignedHR', 'name email')
       .populate('addedBy', 'name email')
       .sort('-createdAt');
+
+    const candidates = await query;
+
+    // Employee gets limited fields — no pipeline stage info
+    if (req.user.role === 'Employee') {
+      const limited = candidates.map(c => ({
+        _id: c._id,
+        name: c.name,
+        email: c.email,
+        phone: c.phone,
+        resumeLink: c.resumeLink,
+        jobId: c.jobId,
+        assignedHR: c.assignedHR,
+        createdAt: c.createdAt
+      }));
+      return res.json({ success: true, count: limited.length, data: limited });
+    }
 
     res.json({
       success: true,
@@ -137,7 +162,7 @@ const updateCandidate = async (req, res) => {
 
 // @desc    Update candidate stage (Kanban)
 // @route   PUT /api/candidates/:id/stage
-// @access  Auth
+// @access  HR only
 const updateStage = async (req, res) => {
   try {
     const { stage } = req.body;

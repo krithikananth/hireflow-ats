@@ -7,6 +7,7 @@ import Dashboard from './pages/Dashboard';
 import CandidatesPage from './pages/CandidatesPage';
 import JobsPage from './pages/JobsPage';
 import PipelinePage from './pages/PipelinePage';
+import AdminPage from './pages/AdminPage';
 
 const DefaultRedirect = () => {
   const { user } = useAuth();
@@ -40,6 +41,9 @@ function App() {
           } />
           <Route path="/pipeline" element={
             <ProtectedRoute allowedRoles={['HR']}><PipelinePage /></ProtectedRoute>
+          } />
+          <Route path="/admin" element={
+            <ProtectedRoute allowedRoles={['HR']}><AdminPage /></ProtectedRoute>
           } />
           <Route path="*" element={<DefaultRedirect />} />
         </Routes>

@@ -28,6 +28,10 @@ const protect = async (req, res, next) => {
       });
     }
 
+    // Track online status
+    req.user.lastActive = new Date();
+    await req.user.save({ validateBeforeSave: false });
+
     next();
   } catch (error) {
     return res.status(401).json({

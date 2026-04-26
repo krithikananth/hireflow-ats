@@ -28,6 +28,7 @@ app.use('/api/jobs', require('./routes/jobRoutes'));
 app.use('/api/candidates', require('./routes/candidateRoutes'));
 app.use('/api/interviews', require('./routes/interviewRoutes'));
 app.use('/api/dashboard', require('./routes/dashboardRoutes'));
+app.use('/api/users', require('./routes/userRoutes'));
 
 // Health check
 app.get('/api/health', (req, res) => {

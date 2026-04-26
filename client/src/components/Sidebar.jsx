@@ -2,7 +2,7 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { 
   LayoutDashboard, Users, Briefcase, Kanban, LogOut, 
-  Menu, X, ChevronRight 
+  Menu, X, ChevronRight, Shield 
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -22,6 +22,7 @@ const Sidebar = () => {
     { path: '/candidates', label: 'Candidates', icon: Users, roles: ['HR', 'Employee'] },
     { path: '/jobs', label: 'Jobs', icon: Briefcase, roles: ['HR'] },
     { path: '/pipeline', label: 'Pipeline', icon: Kanban, roles: ['HR'] },
+    { path: '/admin', label: 'Admin Panel', icon: Shield, roles: ['HR'] },
   ];
 
   const navItems = allNavItems.filter(item => item.roles.includes(user?.role));
