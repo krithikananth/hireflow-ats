@@ -42,7 +42,14 @@ const CandidatesPage = () => {
   const isEmployee = user?.role === 'Employee';
   const isHR = user?.role === 'HR';
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    fetchData();
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(() => {
+      fetchData();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
   const fetchData = async () => {
     try {

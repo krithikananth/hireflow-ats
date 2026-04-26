@@ -43,13 +43,13 @@ const addCandidate = async (req, res) => {
 const getCandidates = async (req, res) => {
   try {
     const { stage, jobId, search } = req.query;
-    const filter = { companyId: req.user.companyId };
+    const filter = {};
 
     if (req.user.role === 'HR') {
-      // HR only sees candidates assigned to them
+      // HR sees all candidates assigned to them (regardless of companyId)
       filter.assignedHR = req.user._id;
     } else {
-      // Employee only sees candidates they added
+      // Employee sees all candidates they added
       filter.addedBy = req.user._id;
     }
 

@@ -8,16 +8,15 @@ const Job = require('../models/Job');
 // @access  HR only
 const getStats = async (req, res) => {
   try {
-    const companyId = req.user.companyId;
     const hrId = req.user._id;
 
     const [totalCandidates, totalJobs, selectedCount, rejectedCount, stageCounts] = await Promise.all([
-      Candidate.countDocuments({ companyId, assignedHR: hrId }),
-      Job.countDocuments({ companyId }),
-      Candidate.countDocuments({ companyId, assignedHR: hrId, currentStage: 'Selected' }),
-      Candidate.countDocuments({ companyId, assignedHR: hrId, currentStage: 'Rejected' }),
+      Candidate.countDocuments({ assignedHR: hrId }),
+      Job.countDocuments({ companyId: req.user.companyId }),
+      Candidate.countDocuments({ assignedHR: hrId, currentStage: 'Selected' }),
+      Candidate.countDocuments({ assignedHR: hrId, currentStage: 'Rejected' }),
       Candidate.aggregate([
-        { $match: { companyId, assignedHR: new mongoose.Types.ObjectId(hrId) } },
+        { $match: { assignedHR: new mongoose.Types.ObjectId(hrId) } },
         { $group: { _id: '$currentStage', count: { $sum: 1 } } }
       ])
     ]);
@@ -83,11 +82,10 @@ const getTodayInterviews = async (req, res) => {
 // @access  HR only
 const getPipeline = async (req, res) => {
   try {
-    const companyId = req.user.companyId;
     const hrId = req.user._id;
 
     const pipeline = await Candidate.aggregate([
-      { $match: { companyId, assignedHR: new mongoose.Types.ObjectId(hrId) } },
+      { $match: { assignedHR: new mongoose.Types.ObjectId(hrId) } },
       {
         $group: {
           _id: '$currentStage',
@@ -120,11 +118,10 @@ const getPipeline = async (req, res) => {
 // @access  HR only
 const getJobStats = async (req, res) => {
   try {
-    const companyId = req.user.companyId;
     const hrId = req.user._id;
 
     const jobStats = await Candidate.aggregate([
-      { $match: { companyId, assignedHR: new mongoose.Types.ObjectId(hrId) } },
+      { $match: { assignedHR: new mongoose.Types.ObjectId(hrId) } },
       {
         $group: {
           _id: '$jobId',
