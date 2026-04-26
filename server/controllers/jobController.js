@@ -32,17 +32,30 @@ const createJob = async (req, res) => {
 // @access  Auth
 const getJobs = async (req, res) => {
   try {
-    // Employee sees all jobs, HR sees only their company's jobs
-    const filter = req.user.role === 'HR' ? { companyId: req.user.companyId } : {};
-    const jobs = await Job.find(filter)
-      .populate('createdBy', 'name email')
-      .sort('-createdAt');
+    if (req.user.role === 'HR') {
+      // HR sees their company's jobs
+      const jobs = await Job.find({ companyId: req.user.companyId })
+        .populate('createdBy', 'name email')
+        .sort('-createdAt');
+      return res.json({ success: true, count: jobs.length, data: jobs });
+    }
 
-    res.json({
-      success: true,
-      count: jobs.length,
-      data: jobs
-    });
+    // Employee sees unique jobs (deduplicated by title+department)
+    const jobs = await Job.aggregate([
+      { $group: {
+        _id: { title: '$title', department: '$department' },
+        jobId: { $first: '$_id' },
+        title: { $first: '$title' },
+        department: { $first: '$department' },
+        description: { $first: '$description' },
+        status: { $first: '$status' },
+        createdAt: { $first: '$createdAt' }
+      }},
+      { $project: { _id: '$jobId', title: 1, department: 1, description: 1, status: 1, createdAt: 1 }},
+      { $sort: { createdAt: -1 }}
+    ]);
+
+    res.json({ success: true, count: jobs.length, data: jobs });
   } catch (error) {
     res.status(500).json({
       success: false,
