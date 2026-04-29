@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
 import Layout from '../components/Layout';
 import Modal from '../components/Modal';
@@ -6,21 +6,245 @@ import Loader from '../components/Loader';
 import api from '../utils/api';
 import { STAGE_COLORS, PIPELINE_STAGES } from '../utils/constants';
 import toast from 'react-hot-toast';
-import { Plus, Search, Edit3, Trash2, ExternalLink, Eye, User, Mail, Phone, Star, MessageSquare, Calendar, Circle, ChevronDown } from 'lucide-react';
+import {
+  Plus, Search, Edit3, Trash2, ExternalLink, Eye, User, Mail,
+  Phone, Star, MessageSquare, Calendar, Circle, ChevronDown,
+  Brain, CheckCircle, Clock, AlertCircle, TrendingUp, Shield, Layers
+} from 'lucide-react';
 
-// Get only forward stages from current stage (no going back)
 const getForwardStages = (currentStage) => {
-  // Stages in order (excluding Rejected — it's always available)
   const orderedStages = ['Applied', 'Screening', 'Technical Round 1', 'Technical Round 2', 'HR Round', 'Selected'];
   const currentIndex = orderedStages.indexOf(currentStage);
   if (currentIndex === -1 || currentStage === 'Selected' || currentStage === 'Rejected') return [];
   const forward = orderedStages.slice(currentIndex + 1);
-  forward.push('Rejected'); // Always allow rejection
+  forward.push('Rejected');
   return forward;
 };
 
 const inputClass = "w-full px-4 py-2.5 bg-surface-50 border border-surface-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400";
 
+// ─── Resume Score Badge (shown in candidate list for HR) ──────────────────────
+const ScoreBadge = ({ score, status }) => {
+  if (status === 'skipped') return null;
+  if (status === 'pending' || status === 'processing') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-600 text-xs font-medium">
+        <Clock size={11} className="animate-spin" /> ATS checking...
+      </span>
+    );
+  }
+  if (status === 'failed') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-red-50 border border-red-200 text-red-500 text-xs">
+        <AlertCircle size={11} /> ATS failed
+      </span>
+    );
+  }
+  if (status === 'done' && score !== null) {
+    const color = score >= 7 ? 'emerald' : score >= 5 ? 'amber' : 'red';
+    return (
+      <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-${color}-50 border border-${color}-200 text-${color}-700 text-xs font-semibold`}>
+        <Brain size={11} /> ATS {score}/10
+      </span>
+    );
+  }
+  return null;
+};
+
+// ─── Circular Score Ring ──────────────────────────────────────────────────────
+const ScoreRing = ({ score, size = 80 }) => {
+  const radius = (size - 12) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const filled = (score / 10) * circumference;
+  const color = score >= 7 ? '#10b981' : score >= 5 ? '#f59e0b' : '#ef4444';
+  return (
+    <svg width={size} height={size} className="rotate-[-90deg]">
+      <circle cx={size/2} cy={size/2} r={radius} fill="none" stroke="#e5e7eb" strokeWidth="6"/>
+      <circle cx={size/2} cy={size/2} r={radius} fill="none" stroke={color} strokeWidth="6"
+        strokeDasharray={`${filled} ${circumference}`} strokeLinecap="round"
+        style={{ transition: 'stroke-dasharray 0.8s ease' }}/>
+      <text x={size/2} y={size/2} textAnchor="middle" dominantBaseline="central"
+        fill={color} fontSize="16" fontWeight="700"
+        style={{ transform: `rotate(90deg)`, transformOrigin: `${size/2}px ${size/2}px` }}>
+        {score}
+      </text>
+    </svg>
+  );
+};
+
+// ─── Sub-score bar ────────────────────────────────────────────────────────────
+const SubScoreBar = ({ label, score, icon: Icon }) => {
+  const pct = (score / 10) * 100;
+  const color = score >= 7 ? 'bg-emerald-500' : score >= 5 ? 'bg-amber-500' : 'bg-red-500';
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-xs">
+        <span className="flex items-center gap-1 text-surface-600 font-medium"><Icon size={12}/>{label}</span>
+        <span className="font-semibold text-surface-800">{score}/10</span>
+      </div>
+      <div className="h-1.5 bg-surface-100 rounded-full overflow-hidden">
+        <div className={`h-full ${color} rounded-full transition-all duration-700`} style={{ width: `${pct}%` }}/>
+      </div>
+    </div>
+  );
+};
+
+// ─── Full ATS Resume Card (shown in HR detail modal) ─────────────────────────
+const ResumeScoreCard = ({ candidateId }) => {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [pollingCount, setPollingCount] = useState(0);
+
+  const fetchScore = useCallback(async () => {
+    try {
+      const res = await api.get(`/candidates/${candidateId}/resume-score`);
+      setData(res.data.data);
+      return res.data.data.resumeCheckStatus;
+    } catch {
+      setData(null);
+      return 'failed';
+    } finally {
+      setLoading(false);
+    }
+  }, [candidateId]);
+
+  useEffect(() => {
+    let timer;
+    const poll = async () => {
+      const status = await fetchScore();
+      // Keep polling if still processing, up to 12 attempts (60s)
+      if ((status === 'pending' || status === 'processing') && pollingCount < 12) {
+        setPollingCount(n => n + 1);
+        timer = setTimeout(poll, 5000);
+      }
+    };
+    poll();
+    return () => clearTimeout(timer);
+  }, [fetchScore, pollingCount]);
+
+  if (loading) return (
+    <div className="flex items-center gap-3 p-4 bg-surface-50 rounded-xl border border-surface-100">
+      <Clock size={18} className="text-amber-500 animate-spin"/>
+      <span className="text-sm text-surface-500">Loading ATS analysis...</span>
+    </div>
+  );
+
+  if (!data) return null;
+
+  const { resumeCheckStatus, resumeScore, resumeAnalysis, resumeCheckedAt } = data;
+
+  if (resumeCheckStatus === 'skipped') return (
+    <div className="p-4 bg-surface-50 rounded-xl border border-surface-100 text-sm text-surface-400 flex items-center gap-2">
+      <AlertCircle size={16}/> No resume link provided — ATS check skipped
+    </div>
+  );
+
+  if (resumeCheckStatus === 'pending' || resumeCheckStatus === 'processing') return (
+    <div className="p-4 bg-amber-50 rounded-xl border border-amber-200">
+      <div className="flex items-center gap-3">
+        <Brain size={20} className="text-amber-500"/>
+        <div>
+          <p className="text-sm font-semibold text-amber-700">ATS Resume Analysis in Progress</p>
+          <p className="text-xs text-amber-600 mt-0.5">AI is evaluating the candidate's resume against the job requirements...</p>
+        </div>
+        <Clock size={16} className="ml-auto text-amber-500 animate-spin flex-shrink-0"/>
+      </div>
+    </div>
+  );
+
+  if (resumeCheckStatus === 'failed') return (
+    <div className="p-4 bg-red-50 rounded-xl border border-red-200 text-sm text-red-600 flex items-center gap-2">
+      <AlertCircle size={16}/> ATS analysis failed. The AI could not process this resume.
+    </div>
+  );
+
+  // ── done ──
+  const score = resumeScore ?? 0;
+  const scoreColor = score >= 7 ? 'text-emerald-600' : score >= 5 ? 'text-amber-600' : 'text-red-500';
+  const badgeBg = score >= 7 ? 'bg-emerald-50 border-emerald-200' : score >= 5 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200';
+  const label = score >= 8 ? 'Excellent Fit' : score >= 6 ? 'Good Fit' : score >= 4 ? 'Partial Fit' : 'Poor Fit';
+
+  return (
+    <div className="space-y-4">
+      {/* Header */}
+      <div className="flex items-center gap-2">
+        <Brain size={16} className="text-primary-500"/>
+        <h4 className="font-bold text-surface-900 text-sm">ATS Resume Score</h4>
+        <span className="ml-auto text-xs text-surface-400">
+          {resumeCheckedAt ? new Date(resumeCheckedAt).toLocaleString() : ''}
+        </span>
+      </div>
+
+      {/* Score + sub-scores */}
+      <div className={`flex items-center gap-5 p-4 rounded-xl border ${badgeBg}`}>
+        <ScoreRing score={score} size={76}/>
+        <div className="flex-1 space-y-2.5">
+          <div>
+            <p className={`text-xl font-bold ${scoreColor}`}>{score}/10</p>
+            <p className={`text-xs font-semibold ${scoreColor}`}>{label}</p>
+          </div>
+          {resumeAnalysis?.skillsMatch != null &&
+            <SubScoreBar label="Skills match" score={resumeAnalysis.skillsMatch} icon={TrendingUp}/>}
+          {resumeAnalysis?.experienceMatch != null &&
+            <SubScoreBar label="Experience" score={resumeAnalysis.experienceMatch} icon={Layers}/>}
+          {resumeAnalysis?.presentationScore != null &&
+            <SubScoreBar label="Presentation" score={resumeAnalysis.presentationScore} icon={Shield}/>}
+        </div>
+      </div>
+
+      {/* Summary */}
+      {resumeAnalysis?.overallSummary && (
+        <div className="p-3 bg-surface-50 rounded-xl border border-surface-100">
+          <p className="text-xs text-surface-600 leading-relaxed">{resumeAnalysis.overallSummary}</p>
+        </div>
+      )}
+
+      {/* Strengths & Weaknesses */}
+      <div className="grid grid-cols-2 gap-3">
+        {resumeAnalysis?.strengths?.length > 0 && (
+          <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-100">
+            <p className="text-xs font-bold text-emerald-700 mb-2 flex items-center gap-1">
+              <CheckCircle size={12}/> Strengths
+            </p>
+            <ul className="space-y-1">
+              {resumeAnalysis.strengths.map((s, i) => (
+                <li key={i} className="text-xs text-emerald-700 flex items-start gap-1.5">
+                  <span className="mt-0.5 w-1 h-1 rounded-full bg-emerald-400 flex-shrink-0"/>
+                  {s}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        {resumeAnalysis?.weaknesses?.length > 0 && (
+          <div className="p-3 bg-red-50 rounded-xl border border-red-100">
+            <p className="text-xs font-bold text-red-700 mb-2 flex items-center gap-1">
+              <AlertCircle size={12}/> Gaps
+            </p>
+            <ul className="space-y-1">
+              {resumeAnalysis.weaknesses.map((w, i) => (
+                <li key={i} className="text-xs text-red-700 flex items-start gap-1.5">
+                  <span className="mt-0.5 w-1 h-1 rounded-full bg-red-400 flex-shrink-0"/>
+                  {w}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </div>
+
+      {/* Recommendation */}
+      {resumeAnalysis?.recommendation && (
+        <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
+          <p className="text-xs font-bold text-blue-700 mb-1">Recommendation</p>
+          <p className="text-xs text-blue-700">{resumeAnalysis.recommendation}</p>
+        </div>
+      )}
+    </div>
+  );
+};
+
+// ─── Main page ────────────────────────────────────────────────────────────────
 const CandidatesPage = () => {
   const { user } = useAuth();
   const [candidates, setCandidates] = useState([]);
@@ -36,18 +260,16 @@ const CandidatesPage = () => {
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [interviewRounds, setInterviewRounds] = useState([]);
   const [showAddRound, setShowAddRound] = useState(false);
-  const [form, setForm] = useState({ name: '', email: '', phone: '', resumeLink: '', jobId: '', assignedHR: '' });
+  const [form, setForm] = useState({ name: '', email: '', phone: '', resumeFile: null, jobId: '', assignedHR: '' });
   const [roundForm, setRoundForm] = useState({ roundName: '', interviewerName: '', score: '', feedback: '', date: '' });
+  const [addingCandidate, setAddingCandidate] = useState(false);
 
   const isEmployee = user?.role === 'Employee';
   const isHR = user?.role === 'HR';
 
   useEffect(() => {
     fetchData();
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(() => {
-      fetchData();
-    }, 30000);
+    const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
   }, []);
 
@@ -66,13 +288,29 @@ const CandidatesPage = () => {
   const handleAdd = async (e) => {
     e.preventDefault();
     if (isEmployee && !form.assignedHR) { toast.error('Please select an HR'); return; }
+    setAddingCandidate(true);
     try {
-      const res = await api.post('/candidates', form);
+      const formData = new FormData();
+      formData.append('name', form.name);
+      formData.append('email', form.email);
+      formData.append('phone', form.phone);
+      formData.append('jobId', form.jobId);
+      if (form.assignedHR) formData.append('assignedHR', form.assignedHR);
+      if (form.resumeFile) formData.append('resumeFile', form.resumeFile);
+
+      const res = await api.post('/candidates', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
       setCandidates([res.data.data, ...candidates]);
       setShowAddModal(false);
-      setForm({ name: '', email: '', phone: '', resumeLink: '', jobId: '', assignedHR: '' });
-      toast.success('Candidate added!');
+      setForm({ name: '', email: '', phone: '', resumeFile: null, jobId: '', assignedHR: '' });
+      if (form.resumeFile) {
+        toast.success('Candidate added! ATS resume analysis started in the background.');
+      } else {
+        toast.success('Candidate added! (No resume uploaded — ATS check skipped)');
+      }
     } catch (err) { toast.error(err.response?.data?.message || 'Failed'); }
+    finally { setAddingCandidate(false); }
   };
 
   const handleEdit = async (e) => {
@@ -96,7 +334,7 @@ const CandidatesPage = () => {
 
   const openEdit = (c) => {
     setSelectedCandidate(c);
-    setForm({ name: c.name, email: c.email, phone: c.phone, resumeLink: c.resumeLink || '', jobId: c.jobId?._id || '', assignedHR: c.assignedHR?._id || '' });
+    setForm({ name: c.name, email: c.email, phone: c.phone, resumeFile: null, jobId: c.jobId?._id || '', assignedHR: c.assignedHR?._id || '' });
     setShowEditModal(true);
   };
 
@@ -137,8 +375,7 @@ const CandidatesPage = () => {
 
   if (loading) return <Layout><Loader size="lg" text="Loading candidates..." /></Layout>;
 
-  // Inline form JSX to avoid focus issues
-  const renderForm = (onSubmit, label) => (
+  const renderForm = (onSubmit, label, isSubmitting = false) => (
     <form onSubmit={onSubmit} className="space-y-4">
       <div className="grid grid-cols-2 gap-4">
         <div>
@@ -156,10 +393,15 @@ const CandidatesPage = () => {
           <input type="text" value={form.phone} onChange={e => setForm(prev => ({...prev, phone: e.target.value}))} required className={inputClass} placeholder="9876543210" />
         </div>
         <div>
-          <label className="block text-sm font-medium text-surface-700 mb-1">Resume Link</label>
-          <input type="url" value={form.resumeLink} onChange={e => setForm(prev => ({...prev, resumeLink: e.target.value}))} className={inputClass} placeholder="https://..." />
+          <label className="block text-sm font-medium text-surface-700 mb-1">Resume File</label>
+          <input type="file" onChange={e => setForm(prev => ({...prev, resumeFile: e.target.files[0]}))} className={inputClass} accept=".pdf,.txt" />
         </div>
       </div>
+      {form.resumeFile && (
+        <div className="flex items-center gap-2 px-3 py-2 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-700">
+          <Brain size={14}/> ATS resume analysis will run automatically after adding
+        </div>
+      )}
       <div>
         <label className="block text-sm font-medium text-surface-700 mb-1">Job *</label>
         <select value={form.jobId} onChange={e => setForm(prev => ({...prev, jobId: e.target.value}))} required className={inputClass}>
@@ -180,7 +422,9 @@ const CandidatesPage = () => {
           </select>
         </div>
       )}
-      <button type="submit" className="w-full py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-xl font-semibold text-sm shadow-lg shadow-primary-500/25 hover:shadow-xl transition-all cursor-pointer">{label}</button>
+      <button type="submit" disabled={isSubmitting} className="w-full py-3 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-xl font-semibold text-sm shadow-lg shadow-primary-500/25 hover:shadow-xl transition-all cursor-pointer disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2">
+        {isSubmitting ? <><Clock size={16} className="animate-spin"/> Processing...</> : label}
+      </button>
     </form>
   );
 
@@ -192,7 +436,7 @@ const CandidatesPage = () => {
             <h1 className="text-2xl font-bold text-surface-900">Candidates</h1>
             <p className="text-surface-500 text-sm mt-1">{filtered.length} candidates found{isEmployee && ' (added by you)'}</p>
           </div>
-          <button id="add-candidate-btn" onClick={() => { setForm({ name: '', email: '', phone: '', resumeLink: '', jobId: '', assignedHR: '' }); setShowAddModal(true); }}
+          <button onClick={() => { setForm({ name: '', email: '', phone: '', resumeFile: null, jobId: '', assignedHR: '' }); setShowAddModal(true); }}
             className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-xl font-semibold text-sm shadow-lg shadow-primary-500/25 hover:shadow-xl transition-all">
             <Plus size={18} /> Add Candidate
           </button>
@@ -216,16 +460,16 @@ const CandidatesPage = () => {
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
           <div className="relative flex-1">
             <Search size={18} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-surface-400" />
-            <input id="search-candidates" type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search by name or email..."
+            <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="Search by name or email..."
               className="w-full pl-11 pr-4 py-2.5 bg-white border border-surface-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20 focus:border-primary-400" />
           </div>
-          <select id="filter-job" value={filterJob} onChange={e => setFilterJob(e.target.value)}
+          <select value={filterJob} onChange={e => setFilterJob(e.target.value)}
             className="px-4 py-2.5 bg-white border border-surface-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20">
             <option value="">All Jobs</option>
             {jobs.map(j => <option key={j._id} value={j._id}>{j.title}</option>)}
           </select>
           {isHR && (
-            <select id="filter-stage" value={filterStage} onChange={e => setFilterStage(e.target.value)}
+            <select value={filterStage} onChange={e => setFilterStage(e.target.value)}
               className="px-4 py-2.5 bg-white border border-surface-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20">
               <option value="">All Stages</option>
               {PIPELINE_STAGES.map(s => <option key={s} value={s}>{s}</option>)}
@@ -241,13 +485,15 @@ const CandidatesPage = () => {
                   <th className="text-left text-xs font-semibold text-surface-500 uppercase px-6 py-4">Candidate</th>
                   <th className="text-left text-xs font-semibold text-surface-500 uppercase px-6 py-4 hidden md:table-cell">Job</th>
                   {isHR && <th className="text-left text-xs font-semibold text-surface-500 uppercase px-6 py-4">Stage</th>}
+                  {isHR && <th className="text-left text-xs font-semibold text-surface-500 uppercase px-6 py-4">ATS Score</th>}
                   {isEmployee && <th className="text-left text-xs font-semibold text-surface-500 uppercase px-6 py-4">Assigned HR</th>}
+                  {isEmployee && <th className="text-left text-xs font-semibold text-surface-500 uppercase px-6 py-4">Resume</th>}
                   <th className="text-right text-xs font-semibold text-surface-500 uppercase px-6 py-4">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-surface-100">
                 {filtered.length === 0 ? (
-                  <tr><td colSpan={4} className="text-center py-12 text-surface-400">No candidates found</td></tr>
+                  <tr><td colSpan={6} className="text-center py-12 text-surface-400">No candidates found</td></tr>
                 ) : filtered.map(c => {
                   const sc = STAGE_COLORS[c.currentStage];
                   return (
@@ -278,17 +524,20 @@ const CandidatesPage = () => {
                                 <select
                                   onChange={e => { if (e.target.value) { handleStageChange(c._id, e.target.value); e.target.value = ''; } }}
                                   defaultValue=""
-                                  className="appearance-none pl-2 pr-6 py-1 bg-surface-50 border border-surface-200 rounded-lg text-xs text-surface-600 cursor-pointer hover:bg-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
-                                >
+                                  className="appearance-none pl-2 pr-6 py-1 bg-surface-50 border border-surface-200 rounded-lg text-xs text-surface-600 cursor-pointer hover:bg-surface-100 focus:outline-none focus:ring-2 focus:ring-primary-500/20">
                                   <option value="" disabled>Move to →</option>
-                                  {getForwardStages(c.currentStage).map(s => (
-                                    <option key={s} value={s}>{s}</option>
-                                  ))}
+                                  {getForwardStages(c.currentStage).map(s => <option key={s} value={s}>{s}</option>)}
                                 </select>
                                 <ChevronDown size={12} className="absolute right-1.5 top-1/2 -translate-y-1/2 text-surface-400 pointer-events-none" />
                               </div>
                             )}
                           </div>
+                        </td>
+                      )}
+                      {/* ATS Score column — HR only */}
+                      {isHR && (
+                        <td className="px-6 py-4">
+                          <ScoreBadge score={c.resumeScore} status={c.resumeCheckStatus} />
                         </td>
                       )}
                       {isEmployee && (
@@ -297,12 +546,31 @@ const CandidatesPage = () => {
                           <p className="text-xs text-surface-400">{c.assignedHR?.email || ''}</p>
                         </td>
                       )}
+                      {/* Resume check status for employee (no score shown) */}
+                      {isEmployee && (
+                        <td className="px-6 py-4">
+                          {c.resumeCheckStatus === 'pending' || c.resumeCheckStatus === 'processing' ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-amber-600">
+                              <Clock size={11} className="animate-spin"/> Checking...
+                            </span>
+                          ) : c.resumeCheckStatus === 'done' ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                              <CheckCircle size={11}/> Reviewed
+                            </span>
+                          ) : c.resumeCheckStatus === 'skipped' ? (
+                            <span className="text-xs text-surface-400">No link</span>
+                          ) : c.resumeCheckStatus === 'failed' ? (
+                            <span className="inline-flex items-center gap-1 text-xs text-red-500">
+                              <AlertCircle size={11}/> Failed
+                            </span>
+                          ) : null}
+                        </td>
+                      )}
                       <td className="px-6 py-4">
                         <div className="flex items-center justify-end gap-1">
                           <button onClick={() => openDetail(c)} className="p-2 hover:bg-primary-50 rounded-lg text-surface-400 hover:text-primary-500"><Eye size={16} /></button>
                           <button onClick={() => openEdit(c)} className="p-2 hover:bg-blue-50 rounded-lg text-surface-400 hover:text-blue-500"><Edit3 size={16} /></button>
                           {isHR && <button onClick={() => handleDelete(c._id)} className="p-2 hover:bg-red-50 rounded-lg text-surface-400 hover:text-red-500"><Trash2 size={16} /></button>}
-                          {c.resumeLink && <a href={c.resumeLink} target="_blank" rel="noopener noreferrer" className="p-2 hover:bg-emerald-50 rounded-lg text-surface-400 hover:text-emerald-500"><ExternalLink size={16} /></a>}
                         </div>
                       </td>
                     </tr>
@@ -314,8 +582,8 @@ const CandidatesPage = () => {
         </div>
 
         {/* Add Modal */}
-        <Modal isOpen={showAddModal} onClose={() => setShowAddModal(false)} title="Add New Candidate">
-          {renderForm(handleAdd, 'Add Candidate')}
+        <Modal isOpen={showAddModal} onClose={() => !addingCandidate && setShowAddModal(false)} title="Add New Candidate">
+          {renderForm(handleAdd, 'Add Candidate', addingCandidate)}
         </Modal>
 
         {/* Edit Modal */}
@@ -334,14 +602,26 @@ const CandidatesPage = () => {
                 <div>
                   <h3 className="text-xl font-bold">{selectedCandidate.name}</h3>
                   {isHR && selectedCandidate.currentStage && (
-                    <span className={`inline-flex items-center gap-1.5 px-3 py-0.5 rounded-lg text-xs font-semibold mt-1 ${STAGE_COLORS[selectedCandidate.currentStage]?.bg} ${STAGE_COLORS[selectedCandidate.currentStage]?.text}`}>{selectedCandidate.currentStage}</span>
+                    <span className={`inline-flex items-center gap-1.5 px-3 py-0.5 rounded-lg text-xs font-semibold mt-1 ${STAGE_COLORS[selectedCandidate.currentStage]?.bg} ${STAGE_COLORS[selectedCandidate.currentStage]?.text}`}>
+                      {selectedCandidate.currentStage}
+                    </span>
                   )}
                 </div>
               </div>
+
               <div className="grid grid-cols-2 gap-3">
                 <div className="flex items-center gap-3 p-3 bg-surface-50 rounded-xl"><Mail size={16} className="text-surface-400" /><span className="text-sm">{selectedCandidate.email}</span></div>
                 <div className="flex items-center gap-3 p-3 bg-surface-50 rounded-xl"><Phone size={16} className="text-surface-400" /><span className="text-sm">{selectedCandidate.phone}</span></div>
               </div>
+
+              {/* ── ATS Resume Score (HR only) ── */}
+              {isHR && (
+                <div>
+                  <ResumeScoreCard candidateId={selectedCandidate._id} />
+                </div>
+              )}
+
+              {/* ── Interview Rounds (HR only) ── */}
               {isHR && (
                 <div>
                   <div className="flex items-center justify-between mb-3">

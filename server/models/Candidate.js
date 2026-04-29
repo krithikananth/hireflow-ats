@@ -54,12 +54,37 @@ const candidateSchema = new mongoose.Schema({
   companyId: {
     type: String,
     required: true
+  },
+
+  // ATS Resume Analysis fields
+  resumeScore: {
+    type: Number,
+    min: 0,
+    max: 10,
+    default: null
+  },
+  resumeAnalysis: {
+    overallSummary: { type: String, default: '' },
+    strengths: [{ type: String }],
+    weaknesses: [{ type: String }],
+    recommendation: { type: String, default: '' },
+    skillsMatch: { type: Number, min: 0, max: 10, default: null },
+    experienceMatch: { type: Number, min: 0, max: 10, default: null },
+    presentationScore: { type: Number, min: 0, max: 10, default: null }
+  },
+  resumeCheckedAt: {
+    type: Date,
+    default: null
+  },
+  resumeCheckStatus: {
+    type: String,
+    enum: ['pending', 'processing', 'done', 'failed', 'skipped'],
+    default: 'pending'
   }
 }, {
   timestamps: true
 });
 
-// Indexes for performance
 candidateSchema.index({ companyId: 1, currentStage: 1 });
 candidateSchema.index({ jobId: 1 });
 candidateSchema.index({ assignedHR: 1 });
