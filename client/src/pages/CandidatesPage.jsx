@@ -135,7 +135,7 @@ const ResumeScoreCard = ({ candidateId }) => {
 
   if (resumeCheckStatus === 'skipped') return (
     <div className="p-4 bg-surface-50 rounded-xl border border-surface-100 text-sm text-surface-400 flex items-center gap-2">
-      <AlertCircle size={16}/> No resume link provided — ATS check skipped
+      <AlertCircle size={16}/> No resume uploaded — ATS check skipped
     </div>
   );
 
@@ -269,7 +269,7 @@ const CandidatesPage = () => {
 
   useEffect(() => {
     fetchData();
-    const interval = setInterval(fetchData, 30000);
+    const interval = setInterval(fetchData, 120000);
     return () => clearInterval(interval);
   }, []);
 
@@ -558,7 +558,7 @@ const CandidatesPage = () => {
                               <CheckCircle size={11}/> Reviewed
                             </span>
                           ) : c.resumeCheckStatus === 'skipped' ? (
-                            <span className="text-xs text-surface-400">No link</span>
+                            <span className="text-xs text-surface-400">No resume</span>
                           ) : c.resumeCheckStatus === 'failed' ? (
                             <span className="inline-flex items-center gap-1 text-xs text-red-500">
                               <AlertCircle size={11}/> Failed

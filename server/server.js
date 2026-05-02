@@ -35,26 +35,7 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'HireFlow ATS Server is running' });
 });
 
-// Gemini API diagnostic test (temporary — remove after debugging)
-app.get('/api/test-gemini', async (req, res) => {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    return res.json({ success: false, error: 'GEMINI_API_KEY is NOT set in environment' });
-  }
-  try {
-    const { analyzeResume } = require('./services/resumeChecker');
-    const result = await analyzeResume({
-      candidateName: 'Test User',
-      resumeText: 'Experienced software developer with 3 years of experience in React and Node.js.',
-      jobTitle: 'Frontend Developer',
-      jobDepartment: 'Engineering',
-      jobDescription: 'Looking for a React developer'
-    });
-    res.json({ success: true, geminiKeySet: true, result });
-  } catch (err) {
-    res.json({ success: false, geminiKeySet: true, error: err.message });
-  }
-});
+
 
 // Global error handler
 app.use((err, req, res, next) => {
@@ -70,6 +51,21 @@ const PORT = process.env.PORT || 5000;
 
 const startServer = async () => {
   await connectDB();
+
+  // On startup: reset all stuck 'pending'/'processing' candidates to 'skipped'
+  // These are leftovers from failed API calls or server restarts
+  try {
+    const Candidate = require('./models/Candidate');
+    const result = await Candidate.updateMany(
+      { resumeCheckStatus: { $in: ['pending', 'processing'] } },
+      { $set: { resumeCheckStatus: 'skipped' } }
+    );
+    if (result.modifiedCount > 0) {
+      console.log(`🧹 Reset ${result.modifiedCount} stuck candidates from 'pending/processing' → 'skipped'`);
+    }
+  } catch (err) {
+    console.error('⚠️ Could not reset stuck candidates:', err.message);
+  }
   
   const server = app.listen(PORT, () => {
     console.log(`🚀 HireFlow ATS Server running on port ${PORT}`);
