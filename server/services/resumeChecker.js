@@ -1,7 +1,49 @@
 const https = require('https');
 
 /**
+ * Makes a single Gemini API call. Returns the parsed result or throws.
+ */
+function callGemini(body, apiKey) {
+  return new Promise((resolve, reject) => {
+    const options = {
+      hostname: 'generativelanguage.googleapis.com',
+      path: `/v1beta/models/gemini-2.0-flash-lite:generateContent?key=${apiKey}`,
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body)
+      }
+    };
+
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', chunk => { data += chunk; });
+      res.on('end', () => {
+        // Return status code along with data so caller can handle retries
+        resolve({ statusCode: res.statusCode, data });
+      });
+    });
+
+    req.on('error', (e) => {
+      console.error('❌ Gemini request network error:', e.message);
+      reject(e);
+    });
+    req.setTimeout(60000, () => { req.destroy(); reject(new Error('Gemini API request timed out after 60s')); });
+    req.write(body);
+    req.end();
+  });
+}
+
+/**
+ * Sleep helper for retry backoff
+ */
+function sleep(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+/**
  * Calls the Google Gemini API to perform ATS resume scoring.
+ * Retries up to 3 times on 429 (rate limit) errors with exponential backoff.
  * @param {object} params
  * @returns {Promise<object>} analysis result
  */
@@ -49,56 +91,54 @@ Scoring: 8-10 excellent, 6-7 good, 4-5 partial, 0-3 poor. Output only JSON.`;
 
   console.log(`🔄 Calling Gemini API for candidate: ${candidateName} (resume length: ${trimmedResume.length} chars)`);
 
-  return new Promise((resolve, reject) => {
-    const options = {
-      hostname: 'generativelanguage.googleapis.com',
-      path: `/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Content-Length': Buffer.byteLength(body)
+  // Retry logic with exponential backoff for 429 rate limit errors
+  const MAX_RETRIES = 4;
+  const BASE_DELAY = 10000; // start with 10 seconds
+
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    const { statusCode, data } = await callGemini(body, apiKey);
+    console.log(`📡 Gemini API response status: ${statusCode} (attempt ${attempt}/${MAX_RETRIES})`);
+
+    // Handle rate limiting with retry
+    if (statusCode === 429) {
+      if (attempt < MAX_RETRIES) {
+        const delay = BASE_DELAY * Math.pow(2, attempt - 1); // 10s, 20s, 40s
+        console.log(`⏳ Rate limited (429). Retrying in ${delay / 1000}s...`);
+        await sleep(delay);
+        continue;
+      } else {
+        console.error('❌ Gemini API rate limit exceeded after all retries');
+        throw new Error('Gemini API rate limit exceeded. Please try again in a few minutes.');
       }
-    };
+    }
 
-    const req = https.request(options, (res) => {
-      let data = '';
-      res.on('data', chunk => { data += chunk; });
-      res.on('end', () => {
-        try {
-          console.log(`📡 Gemini API response status: ${res.statusCode}`);
-          if (res.statusCode !== 200) {
-            console.error(`❌ Gemini API HTTP error ${res.statusCode}:`, data.substring(0, 500));
-            return reject(new Error(`Gemini API returned HTTP ${res.statusCode}`));
-          }
-          const parsed = JSON.parse(data);
-          if (parsed.error) {
-            console.error('❌ Gemini API error:', parsed.error.message);
-            return reject(new Error(parsed.error.message || 'Gemini API error'));
-          }
-          const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
-          if (!text) {
-            console.error('❌ Gemini returned empty text. Full response:', data.substring(0, 500));
-            return reject(new Error('Gemini returned empty response'));
-          }
-          const clean = text.replace(/```json|```/g, '').trim();
-          const result = JSON.parse(clean);
-          console.log(`✅ Gemini analysis complete — score: ${result.overallScore}/10`);
-          resolve(result);
-        } catch (e) {
-          console.error('❌ Failed to parse Gemini response:', e.message, '| Raw:', data.substring(0, 300));
-          reject(new Error('Failed to parse AI response: ' + e.message));
-        }
-      });
-    });
+    // Handle other HTTP errors
+    if (statusCode !== 200) {
+      console.error(`❌ Gemini API HTTP error ${statusCode}:`, data.substring(0, 500));
+      throw new Error(`Gemini API returned HTTP ${statusCode}`);
+    }
 
-    req.on('error', (e) => {
-      console.error('❌ Gemini request network error:', e.message);
-      reject(e);
-    });
-    req.setTimeout(60000, () => { req.destroy(); reject(new Error('Gemini API request timed out after 60s')); });
-    req.write(body);
-    req.end();
-  });
+    // Parse successful response
+    try {
+      const parsed = JSON.parse(data);
+      if (parsed.error) {
+        console.error('❌ Gemini API error:', parsed.error.message);
+        throw new Error(parsed.error.message || 'Gemini API error');
+      }
+      const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
+      if (!text) {
+        console.error('❌ Gemini returned empty text. Full response:', data.substring(0, 500));
+        throw new Error('Gemini returned empty response');
+      }
+      const clean = text.replace(/```json|```/g, '').trim();
+      const result = JSON.parse(clean);
+      console.log(`✅ Gemini analysis complete — score: ${result.overallScore}/10`);
+      return result;
+    } catch (e) {
+      console.error('❌ Failed to parse Gemini response:', e.message, '| Raw:', data.substring(0, 300));
+      throw new Error('Failed to parse AI response: ' + e.message);
+    }
+  }
 }
 
 module.exports = { analyzeResume };
