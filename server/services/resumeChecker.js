@@ -1,7 +1,22 @@
 const https = require('https');
 
 /**
- * Makes a single Gemini API call. Returns the parsed result or throws.
+ * API Key rotation — cycles through multiple keys to avoid rate limits.
+ * Set GEMINI_API_KEY as a comma-separated list of keys in your .env:
+ * GEMINI_API_KEY=key1,key2,key3
+ */
+let keyIndex = 0;
+
+function getNextApiKey() {
+  const keys = (process.env.GEMINI_API_KEY || '').split(',').map(k => k.trim()).filter(Boolean);
+  if (keys.length === 0) throw new Error('GEMINI_API_KEY is not set in environment variables');
+  const key = keys[keyIndex % keys.length];
+  keyIndex++;
+  return { key, keyNumber: ((keyIndex - 1) % keys.length) + 1, totalKeys: keys.length };
+}
+
+/**
+ * Makes a single Gemini API call. Returns status + data.
  */
 function callGemini(body, apiKey) {
   return new Promise((resolve, reject) => {
@@ -18,10 +33,7 @@ function callGemini(body, apiKey) {
     const req = https.request(options, (res) => {
       let data = '';
       res.on('data', chunk => { data += chunk; });
-      res.on('end', () => {
-        // Return status code along with data so caller can handle retries
-        resolve({ statusCode: res.statusCode, data });
-      });
+      res.on('end', () => resolve({ statusCode: res.statusCode, data }));
     });
 
     req.on('error', (e) => {
@@ -34,21 +46,17 @@ function callGemini(body, apiKey) {
   });
 }
 
-/**
- * Sleep helper for retry backoff
- */
 function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 /**
  * Calls the Google Gemini API to perform ATS resume scoring.
- * Retries up to 3 times on 429 (rate limit) errors with exponential backoff.
+ * Rotates through multiple API keys and retries on 429 rate limit errors.
  * @param {object} params
  * @returns {Promise<object>} analysis result
  */
 async function analyzeResume({ candidateName, resumeText, jobTitle, jobDepartment, jobDescription }) {
-  // Truncate resume text to avoid exceeding API limits (keep first 8000 chars)
   const trimmedResume = resumeText ? resumeText.substring(0, 8000) : '';
 
   const prompt = `You are an expert ATS (Applicant Tracking System) resume evaluator.
@@ -84,37 +92,37 @@ Scoring: 8-10 excellent, 6-7 good, 4-5 partial, 0-3 poor. Output only JSON.`;
     }
   });
 
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    throw new Error('GEMINI_API_KEY is not set in environment variables');
-  }
+  console.log(`🔄 ATS check for: ${candidateName} (resume: ${trimmedResume.length} chars)`);
 
-  console.log(`🔄 Calling Gemini API for candidate: ${candidateName} (resume length: ${trimmedResume.length} chars)`);
+  // Try each API key, then retry with backoff
+  const totalKeys = (process.env.GEMINI_API_KEY || '').split(',').filter(k => k.trim()).length;
+  const MAX_ATTEMPTS = Math.max(totalKeys * 2, 4); // At least 4 attempts, or 2x the number of keys
 
-  // Retry logic with exponential backoff for 429 rate limit errors
-  const MAX_RETRIES = 4;
-  const BASE_DELAY = 10000; // start with 10 seconds
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const { key, keyNumber, totalKeys: total } = getNextApiKey();
+    const { statusCode, data } = await callGemini(body, key);
+    console.log(`📡 Gemini status: ${statusCode} (key ${keyNumber}/${total}, attempt ${attempt}/${MAX_ATTEMPTS})`);
 
-  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
-    const { statusCode, data } = await callGemini(body, apiKey);
-    console.log(`📡 Gemini API response status: ${statusCode} (attempt ${attempt}/${MAX_RETRIES})`);
-
-    // Handle rate limiting with retry
     if (statusCode === 429) {
-      if (attempt < MAX_RETRIES) {
-        const delay = BASE_DELAY * Math.pow(2, attempt - 1); // 10s, 20s, 40s
-        console.log(`⏳ Rate limited (429). Retrying in ${delay / 1000}s...`);
-        await sleep(delay);
+      if (attempt < MAX_ATTEMPTS) {
+        // If we have more keys, try the next one immediately; otherwise wait
+        if (attempt % total !== 0) {
+          console.log(`⏳ Key ${keyNumber} rate limited. Trying next key...`);
+          await sleep(1000); // brief pause before trying next key
+        } else {
+          const delay = 15000; // wait 15s after cycling through all keys
+          console.log(`⏳ All keys rate limited. Waiting ${delay / 1000}s before retry cycle...`);
+          await sleep(delay);
+        }
         continue;
       } else {
-        console.error('❌ Gemini API rate limit exceeded after all retries');
-        throw new Error('Gemini API rate limit exceeded. Please try again in a few minutes.');
+        console.error('❌ All API keys exhausted after max retries');
+        throw new Error('Gemini API rate limit exceeded on all keys. Please try again in a few minutes.');
       }
     }
 
-    // Handle other HTTP errors
     if (statusCode !== 200) {
-      console.error(`❌ Gemini API HTTP error ${statusCode}:`, data.substring(0, 500));
+      console.error(`❌ Gemini HTTP ${statusCode}:`, data.substring(0, 500));
       throw new Error(`Gemini API returned HTTP ${statusCode}`);
     }
 
@@ -127,15 +135,15 @@ Scoring: 8-10 excellent, 6-7 good, 4-5 partial, 0-3 poor. Output only JSON.`;
       }
       const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
       if (!text) {
-        console.error('❌ Gemini returned empty text. Full response:', data.substring(0, 500));
+        console.error('❌ Empty response from Gemini:', data.substring(0, 500));
         throw new Error('Gemini returned empty response');
       }
       const clean = text.replace(/```json|```/g, '').trim();
       const result = JSON.parse(clean);
-      console.log(`✅ Gemini analysis complete — score: ${result.overallScore}/10`);
+      console.log(`✅ ATS score for ${candidateName}: ${result.overallScore}/10 (key ${keyNumber})`);
       return result;
     } catch (e) {
-      console.error('❌ Failed to parse Gemini response:', e.message, '| Raw:', data.substring(0, 300));
+      console.error('❌ Parse error:', e.message, '| Raw:', data.substring(0, 300));
       throw new Error('Failed to parse AI response: ' + e.message);
     }
   }
