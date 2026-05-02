@@ -25,7 +25,13 @@ const inputClass = "w-full px-4 py-2.5 bg-surface-50 border border-surface-200 r
 
 // ─── Resume Score Badge (shown in candidate list for HR) ──────────────────────
 const ScoreBadge = ({ score, status }) => {
-  if (status === 'skipped') return null;
+  if (status === 'skipped') {
+    return (
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-surface-50 border border-surface-200 text-surface-400 text-xs">
+        No resume
+      </span>
+    );
+  }
   if (status === 'pending' || status === 'processing') {
     return (
       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg bg-amber-50 border border-amber-200 text-amber-600 text-xs font-medium">
