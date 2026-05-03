@@ -16,7 +16,18 @@ function getTransporter() {
     console.log('📧 Email notifications disabled (EMAIL_USER/EMAIL_PASS not set)');
     return null;
   }
-  transporter = nodemailer.createTransport({ service: 'gmail', auth: { user, pass } });
+  transporter = nodemailer.createTransport({
+    host: 'smtp.gmail.com',
+    port: 587,
+    secure: false,
+    auth: { user, pass },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 15000,
+    pool: true,
+    maxConnections: 3,
+    tls: { rejectUnauthorized: false }
+  });
   console.log('📧 Email notifications enabled via', user);
   return transporter;
 }
