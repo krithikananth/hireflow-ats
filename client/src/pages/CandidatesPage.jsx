@@ -270,6 +270,10 @@ const CandidatesPage = () => {
   const [form, setForm] = useState({ name: '', email: '', phone: '', resumeFile: null, jobId: '', assignedHR: '' });
   const [roundForm, setRoundForm] = useState({ roundName: '', interviewerName: '', score: '', feedback: '', date: '', time: '' });
   const [addingCandidate, setAddingCandidate] = useState(false);
+  // Schedule modal for stage change
+  const [showScheduleModal, setShowScheduleModal] = useState(false);
+  const [pendingStageChange, setPendingStageChange] = useState(null);
+  const [scheduleForm, setScheduleForm] = useState({ date: '', time: '' });
 
   const isEmployee = user?.role === 'Employee';
   const isHR = user?.role === 'HR';
@@ -393,11 +397,48 @@ const CandidatesPage = () => {
   };
 
   const handleStageChange = async (candidateId, newStage) => {
+    // Open schedule modal for interview stages
+    const interviewStages = ['Screening', 'Technical Round 1', 'Technical Round 2', 'HR Round'];
+    if (interviewStages.includes(newStage)) {
+      setPendingStageChange({ candidateId, newStage });
+      setScheduleForm({ date: '', time: '' });
+      setShowScheduleModal(true);
+      // Fetch occupied slots
+      try { const s = await api.get('/interviews/schedule/occupied'); setOccupiedSlots(s.data.data); } catch {}
+      return;
+    }
+    // For Selected/Rejected, move directly
     try {
       const res = await api.put(`/candidates/${candidateId}/stage`, { stage: newStage });
       setCandidates(candidates.map(c => c._id === candidateId ? res.data.data : c));
       toast.success(`Moved to ${newStage}`);
     } catch { toast.error('Failed to update stage'); }
+  };
+
+  const confirmStageChange = async () => {
+    if (!pendingStageChange) return;
+    const { candidateId, newStage } = pendingStageChange;
+    try {
+      // Schedule the interview first
+      if (scheduleForm.date && scheduleForm.time) {
+        const candidate = candidates.find(c => c._id === candidateId);
+        await api.post('/interviews', {
+          candidateId,
+          roundName: newStage,
+          interviewerName: 'TBD',
+          score: 0,
+          feedback: '',
+          date: scheduleForm.date,
+          time: scheduleForm.time
+        });
+      }
+      // Move the stage
+      const res = await api.put(`/candidates/${candidateId}/stage`, { stage: newStage });
+      setCandidates(candidates.map(c => c._id === candidateId ? res.data.data : c));
+      toast.success(`Moved to ${newStage}${scheduleForm.date ? ` — Interview: ${scheduleForm.date} at ${scheduleForm.time}` : ''}`);
+      setShowScheduleModal(false);
+      setPendingStageChange(null);
+    } catch (err) { toast.error(err.response?.data?.message || 'Failed to update stage'); }
   };
 
   const filtered = candidates.filter(c => {
@@ -673,7 +714,14 @@ const CandidatesPage = () => {
                   {showAddRound && (
                     <form onSubmit={handleAddRound} className="p-4 bg-surface-50 rounded-xl border mb-4 space-y-3">
                       <div className="grid grid-cols-2 gap-3">
-                        <input type="text" placeholder="Round Name" required value={roundForm.roundName} onChange={e => setRoundForm(prev => ({...prev, roundName: e.target.value}))} className="px-3 py-2 bg-white border border-surface-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
+                        <select required value={roundForm.roundName} onChange={e => setRoundForm(prev => ({...prev, roundName: e.target.value}))} className="px-3 py-2 bg-white border border-surface-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20">
+                          <option value="" disabled>Select Round</option>
+                          <option value="Screening">Screening</option>
+                          <option value="Technical Round 1">Technical Round 1</option>
+                          <option value="Technical Round 2">Technical Round 2</option>
+                          <option value="HR Round">HR Round</option>
+                          <option value="Final Review">Final Review</option>
+                        </select>
                         <input type="text" placeholder="Interviewer" required value={roundForm.interviewerName} onChange={e => setRoundForm(prev => ({...prev, interviewerName: e.target.value}))} className="px-3 py-2 bg-white border border-surface-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
                       </div>
                       <div className="grid grid-cols-3 gap-3">
@@ -728,6 +776,53 @@ const CandidatesPage = () => {
           )}
         </Modal>
       </div>
+
+      {/* ── Schedule Modal (Stage Change) ── */}
+      <Modal isOpen={showScheduleModal} onClose={() => { setShowScheduleModal(false); setPendingStageChange(null); }} title={`Schedule ${pendingStageChange?.newStage || 'Interview'}`}>
+        <div className="space-y-4">
+          <p className="text-sm text-surface-600">
+            Set the interview date and time for <b>{pendingStageChange?.newStage}</b>.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-surface-500 mb-1">Date *</label>
+              <input type="date" required value={scheduleForm.date} onChange={e => setScheduleForm(prev => ({...prev, date: e.target.value}))} className="w-full px-3 py-2 bg-white border border-surface-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-surface-500 mb-1">Time *</label>
+              <input type="time" required value={scheduleForm.time} onChange={e => setScheduleForm(prev => ({...prev, time: e.target.value}))} className="w-full px-3 py-2 bg-white border border-surface-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
+            </div>
+          </div>
+
+          {/* Occupied Slots */}
+          {occupiedSlots.length > 0 && (
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+              <p className="text-xs font-bold text-amber-700 mb-2 flex items-center gap-1"><AlertCircle size={12} /> Already Occupied Slots</p>
+              <div className="space-y-1 max-h-32 overflow-y-auto">
+                {occupiedSlots.map((s, i) => (
+                  <div key={i} className="flex items-center justify-between text-xs">
+                    <span className="text-amber-800 font-medium flex items-center gap-1"><Calendar size={10} /> {new Date(s.date).toLocaleDateString()} at {s.time}</span>
+                    <span className="text-amber-600">{s.candidateId?.name} — {s.roundName}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="flex gap-3">
+            <button onClick={() => { setShowScheduleModal(false); setPendingStageChange(null); }} className="flex-1 py-2.5 bg-surface-100 text-surface-600 rounded-lg text-sm font-semibold hover:bg-surface-200">
+              Cancel
+            </button>
+            <button
+              onClick={confirmStageChange}
+              disabled={!scheduleForm.date || !scheduleForm.time}
+              className="flex-1 py-2.5 bg-primary-500 text-white rounded-lg text-sm font-semibold hover:bg-primary-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              Confirm & Move Stage
+            </button>
+          </div>
+        </div>
+      </Modal>
     </Layout>
   );
 };
