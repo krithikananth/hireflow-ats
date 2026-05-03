@@ -35,6 +35,23 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'HireFlow ATS Server is running' });
 });
 
+// Email test endpoint
+app.get('/api/test-email', async (req, res) => {
+  try {
+    const { sendStageChangeToCandidate } = require('./services/emailService');
+    await sendStageChangeToCandidate({
+      candidateEmail: 'krithik8115@gmail.com',
+      candidateName: 'Test Candidate',
+      jobTitle: 'Test Position',
+      newStage: 'Screening',
+      hrName: 'Test HR'
+    });
+    res.json({ success: true, message: 'Email sent via Resend' });
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+});
+
 // Global error handler
 app.use((err, req, res, next) => {
   console.error(err.stack);
