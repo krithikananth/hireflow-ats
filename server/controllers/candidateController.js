@@ -91,13 +91,13 @@ const addCandidate = async (req, res) => {
 
       console.log(`📧 Sending new-candidate emails: candidate=${email}, hr=${hrUser?.email}, job=${jobTitle}`);
 
-      // Email candidate: "Your application has been received"
-      await sendNewCandidateToCandidate({ candidateEmail: email, candidateName: name, jobTitle, hrName });
-
-      // Email assigned HR (skip if HR added it themselves)
+      const emailPromises = [
+        sendNewCandidateToCandidate({ candidateEmail: email, candidateName: name, jobTitle, hrName })
+      ];
       if (hrUser && hrUser._id.toString() !== req.user._id.toString()) {
-        await sendNewCandidateToHR({ hrEmail: hrUser.email, hrName: hrUser.name, candidateName: name, candidateEmail: email, jobTitle, addedByName: req.user.name });
+        emailPromises.push(sendNewCandidateToHR({ hrEmail: hrUser.email, hrName: hrUser.name, candidateName: name, candidateEmail: email, jobTitle, addedByName: req.user.name }));
       }
+      await Promise.all(emailPromises);
     } catch (e) { console.error('❌ Email error (addCandidate):', e.message); }
 
     res.status(201).json({ success: true, data: populated });
@@ -262,11 +262,13 @@ const updateStage = async (req, res) => {
 
       console.log(`📧 Sending stage-change emails: candidate=${candidate.email}, hr=${hrEmail}, stage=${stage}`);
 
-      await sendStageChangeToCandidate({ candidateEmail: candidate.email, candidateName: candidate.name, jobTitle, newStage: stage, hrName });
-
+      const emailPromises = [
+        sendStageChangeToCandidate({ candidateEmail: candidate.email, candidateName: candidate.name, jobTitle, newStage: stage, hrName })
+      ];
       if (hrEmail) {
-        await sendStageChangeToHR({ hrEmail, hrName, candidateName: candidate.name, jobTitle, newStage: stage });
+        emailPromises.push(sendStageChangeToHR({ hrEmail, hrName, candidateName: candidate.name, jobTitle, newStage: stage }));
       }
+      await Promise.all(emailPromises);
     } catch (e) { console.error('❌ Email error (updateStage):', e.message); }
 
     res.json({ success: true, data: candidate });

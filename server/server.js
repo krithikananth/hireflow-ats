@@ -64,6 +64,14 @@ const startServer = async () => {
   } catch (err) {
     console.error('⚠️ Startup cleanup error:', err.message);
   }
+
+  // Pre-warm SMTP connection so first email is fast
+  try {
+    const { warmUp } = require('./services/emailService');
+    await warmUp();
+  } catch (err) {
+    console.error('⚠️ Email warmup error:', err.message);
+  }
   
   const server = app.listen(PORT, () => {
     console.log(`🚀 HireFlow ATS Server running on port ${PORT}`);

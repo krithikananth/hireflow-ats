@@ -21,15 +21,28 @@ function getTransporter() {
     port: 587,
     secure: false,
     auth: { user, pass },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 15000,
+    connectionTimeout: 8000,
+    greetingTimeout: 8000,
+    socketTimeout: 10000,
     pool: true,
-    maxConnections: 3,
+    maxConnections: 5,
+    maxMessages: 100,
     tls: { rejectUnauthorized: false }
   });
   console.log('📧 Email notifications enabled via', user);
   return transporter;
+}
+
+// Pre-warm the SMTP connection so first email is fast
+async function warmUp() {
+  const t = getTransporter();
+  if (!t) return;
+  try {
+    await t.verify();
+    console.log('📧 SMTP connection verified and ready');
+  } catch (e) {
+    console.error('⚠️ SMTP warm-up failed:', e.message);
+  }
 }
 
 function buildEmailWrapper(title, subtitle, bodyHtml) {
@@ -209,5 +222,6 @@ module.exports = {
   sendStageChangeToCandidate,
   sendStageChangeToHR,
   sendNewCandidateToHR,
-  sendNewCandidateToCandidate
+  sendNewCandidateToCandidate,
+  warmUp
 };
