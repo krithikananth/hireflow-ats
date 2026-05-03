@@ -2,7 +2,7 @@ const Candidate = require('../models/Candidate');
 const { PIPELINE_STAGES } = require('../models/Candidate');
 const Job = require('../models/Job');
 const { analyzeResume } = require('../services/resumeChecker');
-const { sendStageChangeEmail, sendNewCandidateEmail } = require('../services/emailService');
+const { sendStageChangeToCandidate, sendStageChangeToHR, sendNewCandidateToHR, sendNewCandidateToCandidate } = require('../services/emailService');
 const User = require('../models/User');
 const pdfParse = require('pdf-parse');
 
@@ -90,20 +90,19 @@ const addCandidate = async (req, res) => {
       setImmediate(() => runResumeCheck(candidate._id, resumeText));
     }
 
-    // Fire-and-forget: notify the assigned HR via email
+    // Fire-and-forget: email BOTH the candidate AND the assigned HR
     setImmediate(async () => {
       try {
         const hrUser = await User.findById(populated.assignedHR?._id || assignedHR);
+        const hrName = hrUser?.name || 'HR Team';
+        const jobTitle = populated.jobId?.title || 'Open Position';
+
+        // Email candidate: "Your application has been received"
+        await sendNewCandidateToCandidate({ candidateEmail: email, candidateName: name, jobTitle, hrName });
+
+        // Email assigned HR: "New candidate assigned to you" (skip if HR added it themselves)
         if (hrUser && hrUser._id.toString() !== req.user._id.toString()) {
-          // Only notify if the HR is different from the person adding
-          await sendNewCandidateEmail({
-            hrEmail: hrUser.email,
-            hrName: hrUser.name,
-            candidateName: name,
-            candidateEmail: email,
-            jobTitle: populated.jobId?.title || 'Open Position',
-            addedByName: req.user.name
-          });
+          await sendNewCandidateToHR({ hrEmail: hrUser.email, hrName: hrUser.name, candidateName: name, candidateEmail: email, jobTitle, addedByName: req.user.name });
         }
       } catch (e) { /* silently ignore */ }
     });
@@ -257,14 +256,20 @@ const updateStage = async (req, res) => {
 
     res.json({ success: true, data: candidate });
 
-    // Fire-and-forget: send email notification on stage change
-    setImmediate(() => {
-      sendStageChangeEmail({
-        candidateEmail: candidate.email,
-        candidateName: candidate.name,
-        jobTitle: candidate.jobId?.title || 'Open Position',
-        newStage: stage
-      }).catch(() => {}); // silently ignore email errors
+    // Fire-and-forget: email BOTH the candidate AND the assigned HR about stage change
+    setImmediate(async () => {
+      try {
+        const hrName = candidate.assignedHR?.name || 'HR Team';
+        const jobTitle = candidate.jobId?.title || 'Open Position';
+
+        // Email candidate: "Congratulations! You've moved to [stage]"
+        await sendStageChangeToCandidate({ candidateEmail: candidate.email, candidateName: candidate.name, jobTitle, newStage: stage, hrName });
+
+        // Email assigned HR: "[Candidate] has been moved to [stage]"
+        if (candidate.assignedHR?.email) {
+          await sendStageChangeToHR({ hrEmail: candidate.assignedHR.email, hrName, candidateName: candidate.name, jobTitle, newStage: stage });
+        }
+      } catch (e) { /* silently ignore */ }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
