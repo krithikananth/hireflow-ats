@@ -94,7 +94,8 @@ const addCandidate = async (req, res) => {
       const emailPromises = [
         sendNewCandidateToCandidate({ candidateEmail: email, candidateName: name, jobTitle, hrName })
       ];
-      if (hrUser && hrUser._id.toString() !== req.user._id.toString()) {
+      // Always notify the assigned HR (even if they added the candidate themselves)
+      if (hrUser) {
         emailPromises.push(sendNewCandidateToHR({ hrEmail: hrUser.email, hrName: hrUser.name, candidateName: name, candidateEmail: email, jobTitle, addedByName: req.user.name }));
       }
       await Promise.all(emailPromises);
