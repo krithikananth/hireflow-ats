@@ -2,7 +2,7 @@ const Candidate = require('../models/Candidate');
 const { PIPELINE_STAGES } = require('../models/Candidate');
 const Job = require('../models/Job');
 const { analyzeResume } = require('../services/resumeChecker');
-const { sendStageChangeToCandidate, sendStageChangeToHR, sendNewCandidateToHR, sendNewCandidateToCandidate } = require('../services/emailService');
+const { sendStageChangeToHR, sendNewCandidateToHR } = require('../services/emailService');
 const User = require('../models/User');
 const pdfParse = require('pdf-parse');
 
@@ -83,22 +83,15 @@ const addCandidate = async (req, res) => {
       .populate('assignedHR', 'name email')
       .populate('addedBy', 'name email');
 
-    // Send emails BEFORE response (Render free tier kills process after response)
+    // Send HR notification email BEFORE response (Render kills process after response)
     try {
       const hrUser = await User.findById(populated.assignedHR?._id || assignedHR);
-      const hrName = hrUser?.name || 'HR Team';
       const jobTitle = populated.jobId?.title || 'Open Position';
 
-      console.log(`📧 Sending new-candidate emails: candidate=${email}, hr=${hrUser?.email}, job=${jobTitle}`);
-
-      const emailPromises = [
-        sendNewCandidateToCandidate({ candidateEmail: email, candidateName: name, jobTitle, hrName })
-      ];
-      // Always notify the assigned HR (even if they added the candidate themselves)
       if (hrUser) {
-        emailPromises.push(sendNewCandidateToHR({ hrEmail: hrUser.email, hrName: hrUser.name, candidateName: name, candidateEmail: email, jobTitle, addedByName: req.user.name }));
+        console.log(`📧 Notifying HR: ${hrUser.email} about new candidate ${name}`);
+        await sendNewCandidateToHR({ hrEmail: hrUser.email, hrName: hrUser.name, candidateName: name, candidateEmail: email, jobTitle, addedByName: req.user.name });
       }
-      await Promise.all(emailPromises);
     } catch (e) { console.error('❌ Email error (addCandidate):', e.message); }
 
     res.status(201).json({ success: true, data: populated });
@@ -255,21 +248,16 @@ const updateStage = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Candidate not found' });
     }
 
-    // Send emails BEFORE response (Render free tier kills process after response)
+    // Send HR notification email BEFORE response
     try {
-      const hrName = candidate.assignedHR?.name || 'HR Team';
       const hrEmail = candidate.assignedHR?.email;
+      const hrName = candidate.assignedHR?.name || 'HR Team';
       const jobTitle = candidate.jobId?.title || 'Open Position';
 
-      console.log(`📧 Sending stage-change emails: candidate=${candidate.email}, hr=${hrEmail}, stage=${stage}`);
-
-      const emailPromises = [
-        sendStageChangeToCandidate({ candidateEmail: candidate.email, candidateName: candidate.name, jobTitle, newStage: stage, hrName })
-      ];
       if (hrEmail) {
-        emailPromises.push(sendStageChangeToHR({ hrEmail, hrName, candidateName: candidate.name, jobTitle, newStage: stage }));
+        console.log(`📧 Notifying HR: ${hrEmail} about ${candidate.name} → ${stage}`);
+        await sendStageChangeToHR({ hrEmail, hrName, candidateName: candidate.name, jobTitle, newStage: stage });
       }
-      await Promise.all(emailPromises);
     } catch (e) { console.error('❌ Email error (updateStage):', e.message); }
 
     res.json({ success: true, data: candidate });

@@ -30,6 +30,11 @@ const interviewRoundSchema = new mongoose.Schema({
     type: Date,
     required: [true, 'Interview date is required']
   },
+  time: {
+    type: String,
+    required: [true, 'Interview time is required'],
+    trim: true
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User',

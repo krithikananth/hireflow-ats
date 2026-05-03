@@ -5,7 +5,17 @@ const InterviewRound = require('../models/InterviewRound');
 // @access  Auth
 const addRound = async (req, res) => {
   try {
-    const { candidateId, roundName, interviewerName, score, feedback, date } = req.body;
+    const { candidateId, roundName, interviewerName, score, feedback, date, time } = req.body;
+
+    // Check if the date+time slot is already occupied
+    const existing = await InterviewRound.findOne({ date: new Date(date), time });
+    if (existing) {
+      const occupiedCandidate = await require('../models/Candidate').findById(existing.candidateId).select('name');
+      return res.status(400).json({
+        success: false,
+        message: `This time slot (${time} on ${new Date(date).toLocaleDateString()}) is already occupied by ${occupiedCandidate?.name || 'another candidate'}`
+      });
+    }
 
     const round = await InterviewRound.create({
       candidateId,
@@ -14,6 +24,7 @@ const addRound = async (req, res) => {
       score: score || 0,
       feedback: feedback || '',
       date,
+      time: time || '10:00',
       createdBy: req.user._id
     });
 
@@ -37,6 +48,34 @@ const getRounds = async (req, res) => {
     const rounds = await InterviewRound.find({ candidateId: req.params.candidateId })
       .populate('createdBy', 'name email')
       .sort('date');
+
+    res.json({
+      success: true,
+      count: rounds.length,
+      data: rounds
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// @desc    Get occupied interview schedule (all booked date+time slots)
+// @route   GET /api/interviews/schedule/occupied
+// @access  Auth (both HR and Employee can see)
+const getOccupiedSchedule = async (req, res) => {
+  try {
+    // Get all interviews from today onwards
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const rounds = await InterviewRound.find({ date: { $gte: today } })
+      .populate('candidateId', 'name')
+      .populate('createdBy', 'name')
+      .select('date time roundName interviewerName candidateId')
+      .sort('date time');
 
     res.json({
       success: true,
@@ -107,4 +146,4 @@ const deleteRound = async (req, res) => {
   }
 };
 
-module.exports = { addRound, getRounds, updateRound, deleteRound };
+module.exports = { addRound, getRounds, getOccupiedSchedule, updateRound, deleteRound };

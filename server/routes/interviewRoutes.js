@@ -1,7 +1,10 @@
 const express = require('express');
 const router = express.Router();
-const { addRound, getRounds, updateRound, deleteRound } = require('../controllers/interviewController');
+const { addRound, getRounds, getOccupiedSchedule, updateRound, deleteRound } = require('../controllers/interviewController');
 const { protect, authorize } = require('../middleware/auth');
+
+// Schedule must come BEFORE /:candidateId to avoid route conflict
+router.get('/schedule/occupied', protect, getOccupiedSchedule);
 
 router.post('/', protect, addRound);
 router.get('/:candidateId', protect, authorize('HR'), getRounds);

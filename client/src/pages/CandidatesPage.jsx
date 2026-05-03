@@ -266,8 +266,9 @@ const CandidatesPage = () => {
   const [selectedCandidate, setSelectedCandidate] = useState(null);
   const [interviewRounds, setInterviewRounds] = useState([]);
   const [showAddRound, setShowAddRound] = useState(false);
+  const [occupiedSlots, setOccupiedSlots] = useState([]);
   const [form, setForm] = useState({ name: '', email: '', phone: '', resumeFile: null, jobId: '', assignedHR: '' });
-  const [roundForm, setRoundForm] = useState({ roundName: '', interviewerName: '', score: '', feedback: '', date: '' });
+  const [roundForm, setRoundForm] = useState({ roundName: '', interviewerName: '', score: '', feedback: '', date: '', time: '' });
   const [addingCandidate, setAddingCandidate] = useState(false);
 
   const isEmployee = user?.role === 'Employee';
@@ -384,9 +385,11 @@ const CandidatesPage = () => {
       const res = await api.post('/interviews', { ...roundForm, candidateId: selectedCandidate._id, score: Number(roundForm.score) });
       setInterviewRounds([...interviewRounds, res.data.data]);
       setShowAddRound(false);
-      setRoundForm({ roundName: '', interviewerName: '', score: '', feedback: '', date: '' });
+      setRoundForm({ roundName: '', interviewerName: '', score: '', feedback: '', date: '', time: '' });
       toast.success('Round added!');
-    } catch { toast.error('Failed'); }
+      // Refresh occupied slots
+      try { const s = await api.get('/interviews/schedule/occupied'); setOccupiedSlots(s.data.data); } catch {}
+    } catch (err) { toast.error(err.response?.data?.message || 'Failed to add round'); }
   };
 
   const handleStageChange = async (candidateId, newStage) => {
@@ -665,7 +668,7 @@ const CandidatesPage = () => {
                 <div>
                   <div className="flex items-center justify-between mb-3">
                     <h4 className="font-bold text-surface-900">Interview Rounds</h4>
-                    <button onClick={() => setShowAddRound(!showAddRound)} className="flex items-center gap-1 px-3 py-1.5 bg-primary-50 text-primary-600 rounded-lg text-xs font-semibold hover:bg-primary-100"><Plus size={14} /> Add Round</button>
+                    <button onClick={() => { setShowAddRound(!showAddRound); if (!showAddRound) { api.get('/interviews/schedule/occupied').then(r => setOccupiedSlots(r.data.data)).catch(() => {}); } }} className="flex items-center gap-1 px-3 py-1.5 bg-primary-50 text-primary-600 rounded-lg text-xs font-semibold hover:bg-primary-100"><Plus size={14} /> Add Round</button>
                   </div>
                   {showAddRound && (
                     <form onSubmit={handleAddRound} className="p-4 bg-surface-50 rounded-xl border mb-4 space-y-3">
@@ -673,12 +676,27 @@ const CandidatesPage = () => {
                         <input type="text" placeholder="Round Name" required value={roundForm.roundName} onChange={e => setRoundForm(prev => ({...prev, roundName: e.target.value}))} className="px-3 py-2 bg-white border border-surface-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
                         <input type="text" placeholder="Interviewer" required value={roundForm.interviewerName} onChange={e => setRoundForm(prev => ({...prev, interviewerName: e.target.value}))} className="px-3 py-2 bg-white border border-surface-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
+                      <div className="grid grid-cols-3 gap-3">
                         <input type="number" placeholder="Score (0-10)" min="0" max="10" required value={roundForm.score} onChange={e => setRoundForm(prev => ({...prev, score: e.target.value}))} className="px-3 py-2 bg-white border border-surface-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
                         <input type="date" required value={roundForm.date} onChange={e => setRoundForm(prev => ({...prev, date: e.target.value}))} className="px-3 py-2 bg-white border border-surface-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
+                        <input type="time" required value={roundForm.time} onChange={e => setRoundForm(prev => ({...prev, time: e.target.value}))} className="px-3 py-2 bg-white border border-surface-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
                       </div>
                       <textarea placeholder="Feedback" rows={2} value={roundForm.feedback} onChange={e => setRoundForm(prev => ({...prev, feedback: e.target.value}))} className="w-full px-3 py-2 bg-white border border-surface-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary-500/20" />
                       <button type="submit" className="w-full py-2 bg-primary-500 text-white rounded-lg text-sm font-semibold hover:bg-primary-600">Save Round</button>
+                      {/* Occupied Slots */}
+                      {occupiedSlots.length > 0 && (
+                        <div className="mt-2 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                          <p className="text-xs font-bold text-amber-700 mb-2 flex items-center gap-1"><AlertCircle size={12} /> Occupied Slots</p>
+                          <div className="space-y-1">
+                            {occupiedSlots.map((s, i) => (
+                              <div key={i} className="flex items-center justify-between text-xs">
+                                <span className="text-amber-800 font-medium">{new Date(s.date).toLocaleDateString()} at {s.time}</span>
+                                <span className="text-amber-600">{s.candidateId?.name} — {s.roundName}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </form>
                   )}
                   {interviewRounds.length === 0 ? <p className="text-sm text-surface-400 text-center py-4">No rounds yet</p> : (
@@ -691,6 +709,7 @@ const CandidatesPage = () => {
                               <div className="flex items-center gap-3 mt-1">
                                 <span className="flex items-center gap-1 text-xs text-surface-500"><User size={12} /> {r.interviewerName}</span>
                                 <span className="flex items-center gap-1 text-xs text-surface-500"><Calendar size={12} /> {new Date(r.date).toLocaleDateString()}</span>
+                                <span className="flex items-center gap-1 text-xs text-surface-500"><Clock size={12} /> {r.time || 'N/A'}</span>
                               </div>
                             </div>
                             <div className="flex items-center gap-1 px-3 py-1 bg-primary-50 rounded-lg">
