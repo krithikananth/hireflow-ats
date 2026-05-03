@@ -97,6 +97,8 @@ const addCandidate = async (req, res) => {
         const hrName = hrUser?.name || 'HR Team';
         const jobTitle = populated.jobId?.title || 'Open Position';
 
+        console.log(`📧 Sending new-candidate emails: candidate=${email}, hr=${hrUser?.email}, job=${jobTitle}`);
+
         // Email candidate: "Your application has been received"
         await sendNewCandidateToCandidate({ candidateEmail: email, candidateName: name, jobTitle, hrName });
 
@@ -104,7 +106,7 @@ const addCandidate = async (req, res) => {
         if (hrUser && hrUser._id.toString() !== req.user._id.toString()) {
           await sendNewCandidateToHR({ hrEmail: hrUser.email, hrName: hrUser.name, candidateName: name, candidateEmail: email, jobTitle, addedByName: req.user.name });
         }
-      } catch (e) { /* silently ignore */ }
+      } catch (e) { console.error('❌ Email error (addCandidate):', e.message); }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -260,16 +262,19 @@ const updateStage = async (req, res) => {
     setImmediate(async () => {
       try {
         const hrName = candidate.assignedHR?.name || 'HR Team';
+        const hrEmail = candidate.assignedHR?.email;
         const jobTitle = candidate.jobId?.title || 'Open Position';
+
+        console.log(`📧 Sending stage-change emails: candidate=${candidate.email}, hr=${hrEmail}, stage=${stage}`);
 
         // Email candidate: "Congratulations! You've moved to [stage]"
         await sendStageChangeToCandidate({ candidateEmail: candidate.email, candidateName: candidate.name, jobTitle, newStage: stage, hrName });
 
         // Email assigned HR: "[Candidate] has been moved to [stage]"
-        if (candidate.assignedHR?.email) {
-          await sendStageChangeToHR({ hrEmail: candidate.assignedHR.email, hrName, candidateName: candidate.name, jobTitle, newStage: stage });
+        if (hrEmail) {
+          await sendStageChangeToHR({ hrEmail, hrName, candidateName: candidate.name, jobTitle, newStage: stage });
         }
-      } catch (e) { /* silently ignore */ }
+      } catch (e) { console.error('❌ Email error (updateStage):', e.message); }
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

@@ -35,6 +35,30 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', message: 'HireFlow ATS Server is running' });
 });
 
+// Email diagnostic endpoint (temporary — remove after testing)
+app.get('/api/test-email', async (req, res) => {
+  try {
+    const { sendStageChangeToCandidate } = require('./services/emailService');
+    const emailUser = process.env.EMAIL_USER;
+    const emailPass = process.env.EMAIL_PASS;
+    
+    if (!emailUser || !emailPass) {
+      return res.json({ success: false, error: 'EMAIL_USER or EMAIL_PASS not set', emailUser: !!emailUser, emailPass: !!emailPass });
+    }
+
+    await sendStageChangeToCandidate({
+      candidateEmail: emailUser,
+      candidateName: 'Test Candidate',
+      jobTitle: 'Test Position',
+      newStage: 'Screening',
+      hrName: 'Test HR'
+    });
+
+    res.json({ success: true, message: 'Test email sent to ' + emailUser });
+  } catch (err) {
+    res.json({ success: false, error: err.message });
+  }
+});
 
 
 // Global error handler
