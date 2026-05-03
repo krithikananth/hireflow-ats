@@ -2,6 +2,7 @@ const Candidate = require('../models/Candidate');
 const { PIPELINE_STAGES } = require('../models/Candidate');
 const Job = require('../models/Job');
 const { analyzeResume } = require('../services/resumeChecker');
+const { sendStageChangeEmail } = require('../services/emailService');
 const pdfParse = require('pdf-parse');
 
 // ─── Internal helper: run ATS check after candidate creation ──────────────────
@@ -236,6 +237,16 @@ const updateStage = async (req, res) => {
     }
 
     res.json({ success: true, data: candidate });
+
+    // Fire-and-forget: send email notification on stage change
+    setImmediate(() => {
+      sendStageChangeEmail({
+        candidateEmail: candidate.email,
+        candidateName: candidate.name,
+        jobTitle: candidate.jobId?.title || 'Open Position',
+        newStage: stage
+      }).catch(() => {}); // silently ignore email errors
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

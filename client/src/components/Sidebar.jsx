@@ -2,15 +2,28 @@ import { useAuth } from '../context/AuthContext';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { 
   LayoutDashboard, Users, Briefcase, Kanban, LogOut, 
-  Menu, X, ChevronRight, Shield 
+  Menu, X, ChevronRight, Shield, Moon, Sun
 } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const Sidebar = () => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [darkMode, setDarkMode] = useState(() => {
+    return localStorage.getItem('hireflow-theme') === 'dark';
+  });
+
+  useEffect(() => {
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+      localStorage.setItem('hireflow-theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      localStorage.setItem('hireflow-theme', 'light');
+    }
+  }, [darkMode]);
 
   const handleLogout = () => {
     logout();
@@ -113,8 +126,17 @@ const Sidebar = () => {
           })}
         </nav>
 
-        {/* Logout */}
-        <div className="p-4 border-t border-surface-100">
+        {/* Dark Mode Toggle + Logout */}
+        <div className="p-4 border-t border-surface-100 space-y-1">
+          <button
+            id="theme-toggle"
+            onClick={() => setDarkMode(!darkMode)}
+            className="flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium
+              text-surface-600 hover:bg-surface-100 hover:text-surface-900 transition-all duration-200 w-full"
+          >
+            {darkMode ? <Sun size={20} className="text-warning-500 theme-toggle" /> : <Moon size={20} className="text-surface-400 theme-toggle" />}
+            <span>{darkMode ? 'Light Mode' : 'Dark Mode'}</span>
+          </button>
           <button
             id="logout-button"
             onClick={handleLogout}

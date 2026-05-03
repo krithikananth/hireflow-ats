@@ -9,7 +9,7 @@ import toast from 'react-hot-toast';
 import {
   Plus, Search, Edit3, Trash2, ExternalLink, Eye, User, Mail,
   Phone, Star, MessageSquare, Calendar, Circle, ChevronDown,
-  Brain, CheckCircle, Clock, AlertCircle, TrendingUp, Shield, Layers
+  Brain, CheckCircle, Clock, AlertCircle, TrendingUp, Shield, Layers, Download
 } from 'lucide-react';
 
 const getForwardStages = (currentStage) => {
@@ -273,6 +273,31 @@ const CandidatesPage = () => {
   const isEmployee = user?.role === 'Employee';
   const isHR = user?.role === 'HR';
 
+  // CSV Export function
+  const exportToCSV = () => {
+    if (filtered.length === 0) { toast.error('No candidates to export'); return; }
+    const headers = ['Name', 'Email', 'Phone', 'Job Title', 'Department', 'Stage', 'ATS Score', 'ATS Status'];
+    const rows = filtered.map(c => [
+      c.name,
+      c.email,
+      c.phone || '',
+      c.jobId?.title || '',
+      c.jobId?.department || '',
+      c.currentStage,
+      c.resumeScore !== null && c.resumeScore !== undefined ? c.resumeScore + '/10' : 'N/A',
+      c.resumeCheckStatus || 'N/A'
+    ]);
+    const csvContent = [headers, ...rows].map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `hireflow_candidates_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+    toast.success(`Exported ${filtered.length} candidates to CSV`);
+  };
+
   useEffect(() => {
     fetchData();
     const interval = setInterval(fetchData, 120000);
@@ -442,10 +467,18 @@ const CandidatesPage = () => {
             <h1 className="text-2xl font-bold text-surface-900">Candidates</h1>
             <p className="text-surface-500 text-sm mt-1">{filtered.length} candidates found{isEmployee && ' (added by you)'}</p>
           </div>
-          <button onClick={() => { setForm({ name: '', email: '', phone: '', resumeFile: null, jobId: '', assignedHR: '' }); setShowAddModal(true); }}
-            className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-xl font-semibold text-sm shadow-lg shadow-primary-500/25 hover:shadow-xl transition-all">
-            <Plus size={18} /> Add Candidate
-          </button>
+          <div className="flex items-center gap-2">
+            {isHR && (
+              <button onClick={exportToCSV}
+                className="flex items-center gap-2 px-4 py-2.5 bg-white border border-surface-200 text-surface-700 rounded-xl font-semibold text-sm hover:bg-surface-50 hover:border-surface-300 transition-all">
+                <Download size={16} /> Export CSV
+              </button>
+            )}
+            <button onClick={() => { setForm({ name: '', email: '', phone: '', resumeFile: null, jobId: '', assignedHR: '' }); setShowAddModal(true); }}
+              className="flex items-center gap-2 px-5 py-2.5 bg-gradient-to-r from-primary-500 to-primary-600 text-white rounded-xl font-semibold text-sm shadow-lg shadow-primary-500/25 hover:shadow-xl transition-all">
+              <Plus size={18} /> Add Candidate
+            </button>
+          </div>
         </div>
 
         {isEmployee && hrList.length > 0 && (

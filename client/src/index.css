@@ -39,7 +39,20 @@
   --font-sans: 'Inter', system-ui, -apple-system, sans-serif;
 }
 
-
+/* ─── Dark Mode Variables ─────────────────────────────────────────────────────── */
+.dark {
+  --color-surface-50: #0f172a;
+  --color-surface-100: #1e293b;
+  --color-surface-200: #334155;
+  --color-surface-300: #475569;
+  --color-surface-400: #64748b;
+  --color-surface-500: #94a3b8;
+  --color-surface-600: #cbd5e1;
+  --color-surface-700: #e2e8f0;
+  --color-surface-800: #f1f5f9;
+  --color-surface-900: #f8fafc;
+  --color-surface-950: #ffffff;
+}
 
 body {
   font-family: var(--font-sans);
@@ -47,6 +60,34 @@ body {
   color: var(--color-surface-900);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Dark mode overrides for components using hardcoded bg-white */
+.dark .bg-white {
+  background-color: var(--color-surface-100) !important;
+}
+
+.dark .border-surface-100 {
+  border-color: var(--color-surface-200) !important;
+}
+
+.dark .border-surface-200 {
+  border-color: var(--color-surface-300) !important;
+}
+
+.dark input,
+.dark select,
+.dark textarea {
+  background-color: var(--color-surface-200) !important;
+  border-color: var(--color-surface-300) !important;
+  color: var(--color-surface-900) !important;
+}
+
+.dark input::placeholder,
+.dark select::placeholder,
+.dark textarea::placeholder {
+  color: var(--color-surface-400) !important;
 }
 
 /* Custom scrollbar */
@@ -73,6 +114,11 @@ body {
   background: rgba(255, 255, 255, 0.7);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.dark .glass {
+  background: rgba(30, 41, 59, 0.7);
+  border: 1px solid rgba(51, 65, 85, 0.3);
 }
 
 /* Gradient text */
@@ -138,4 +184,13 @@ body {
 .kanban-card-dragging {
   box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
   transform: rotate(2deg);
+}
+
+/* Dark mode toggle animation */
+.theme-toggle {
+  transition: transform 0.3s ease;
+}
+
+.theme-toggle:hover {
+  transform: rotate(30deg);
 }
