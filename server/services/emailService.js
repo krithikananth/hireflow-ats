@@ -116,4 +116,63 @@ async function sendStageChangeEmail({ candidateEmail, candidateName, jobTitle, n
   }
 }
 
-module.exports = { sendStageChangeEmail };
+/**
+ * Notify the assigned HR when a new candidate is added to their queue.
+ */
+async function sendNewCandidateEmail({ hrEmail, hrName, candidateName, candidateEmail, jobTitle, addedByName, companyName = 'HireFlow' }) {
+  const transport = getTransporter();
+  if (!transport) return;
+
+  const html = `
+  <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 0;">
+    <div style="background: linear-gradient(135deg, #6366f1, #4f46e5); padding: 32px; border-radius: 16px 16px 0 0;">
+      <h1 style="color: white; margin: 0; font-size: 24px;">HireFlow ATS</h1>
+      <p style="color: rgba(255,255,255,0.8); margin: 4px 0 0; font-size: 14px;">New Candidate Assigned</p>
+    </div>
+    <div style="background: #ffffff; padding: 32px; border: 1px solid #e2e8f0; border-top: none;">
+      <p style="font-size: 16px; color: #334155; margin: 0 0 8px;">Hi <b>${hrName}</b>,</p>
+      <div style="background: #f8fafc; border-radius: 12px; padding: 20px; margin: 16px 0; border: 1px solid #e2e8f0;">
+        <p style="font-size: 28px; margin: 0 0 8px;">👤</p>
+        <p style="font-size: 14px; color: #475569; margin: 0; line-height: 1.6;">
+          A new candidate has been assigned to you for review.
+        </p>
+      </div>
+      <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+        <tr>
+          <td style="padding: 8px 12px; font-size: 13px; color: #94a3b8; border-bottom: 1px solid #f1f5f9;">Candidate</td>
+          <td style="padding: 8px 12px; font-size: 13px; color: #334155; font-weight: 600; border-bottom: 1px solid #f1f5f9;">${candidateName}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 12px; font-size: 13px; color: #94a3b8; border-bottom: 1px solid #f1f5f9;">Email</td>
+          <td style="padding: 8px 12px; font-size: 13px; color: #334155; border-bottom: 1px solid #f1f5f9;">${candidateEmail}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 12px; font-size: 13px; color: #94a3b8; border-bottom: 1px solid #f1f5f9;">Position</td>
+          <td style="padding: 8px 12px; font-size: 13px; color: #6366f1; font-weight: 600; border-bottom: 1px solid #f1f5f9;">${jobTitle}</td>
+        </tr>
+        <tr>
+          <td style="padding: 8px 12px; font-size: 13px; color: #94a3b8;">Added by</td>
+          <td style="padding: 8px 12px; font-size: 13px; color: #334155;">${addedByName}</td>
+        </tr>
+      </table>
+      <p style="font-size: 13px; color: #94a3b8; margin: 24px 0 0;">Best regards,<br><b>${companyName} System</b></p>
+    </div>
+    <div style="background: #f1f5f9; padding: 16px; border-radius: 0 0 16px 16px; text-align: center; border: 1px solid #e2e8f0; border-top: none;">
+      <p style="font-size: 11px; color: #94a3b8; margin: 0;">This is an automated notification from HireFlow ATS</p>
+    </div>
+  </div>`;
+
+  try {
+    await transport.sendMail({
+      from: `"${companyName}" <${process.env.EMAIL_USER}>`,
+      to: hrEmail,
+      subject: `New Candidate Assigned — ${candidateName} for ${jobTitle}`,
+      html
+    });
+    console.log(`📧 HR notification sent to ${hrEmail}: New candidate ${candidateName}`);
+  } catch (err) {
+    console.error(`⚠️ HR email failed to ${hrEmail}:`, err.message);
+  }
+}
+
+module.exports = { sendStageChangeEmail, sendNewCandidateEmail };

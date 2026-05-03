@@ -2,7 +2,8 @@ const Candidate = require('../models/Candidate');
 const { PIPELINE_STAGES } = require('../models/Candidate');
 const Job = require('../models/Job');
 const { analyzeResume } = require('../services/resumeChecker');
-const { sendStageChangeEmail } = require('../services/emailService');
+const { sendStageChangeEmail, sendNewCandidateEmail } = require('../services/emailService');
+const User = require('../models/User');
 const pdfParse = require('pdf-parse');
 
 // ─── Internal helper: run ATS check after candidate creation ──────────────────
@@ -88,6 +89,24 @@ const addCandidate = async (req, res) => {
     if (resumeText) {
       setImmediate(() => runResumeCheck(candidate._id, resumeText));
     }
+
+    // Fire-and-forget: notify the assigned HR via email
+    setImmediate(async () => {
+      try {
+        const hrUser = await User.findById(populated.assignedHR?._id || assignedHR);
+        if (hrUser && hrUser._id.toString() !== req.user._id.toString()) {
+          // Only notify if the HR is different from the person adding
+          await sendNewCandidateEmail({
+            hrEmail: hrUser.email,
+            hrName: hrUser.name,
+            candidateName: name,
+            candidateEmail: email,
+            jobTitle: populated.jobId?.title || 'Open Position',
+            addedByName: req.user.name
+          });
+        }
+      } catch (e) { /* silently ignore */ }
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
