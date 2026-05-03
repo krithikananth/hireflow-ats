@@ -83,31 +83,29 @@ const addCandidate = async (req, res) => {
       .populate('assignedHR', 'name email')
       .populate('addedBy', 'name email');
 
+    // Send emails BEFORE response (Render free tier kills process after response)
+    try {
+      const hrUser = await User.findById(populated.assignedHR?._id || assignedHR);
+      const hrName = hrUser?.name || 'HR Team';
+      const jobTitle = populated.jobId?.title || 'Open Position';
+
+      console.log(`📧 Sending new-candidate emails: candidate=${email}, hr=${hrUser?.email}, job=${jobTitle}`);
+
+      // Email candidate: "Your application has been received"
+      await sendNewCandidateToCandidate({ candidateEmail: email, candidateName: name, jobTitle, hrName });
+
+      // Email assigned HR (skip if HR added it themselves)
+      if (hrUser && hrUser._id.toString() !== req.user._id.toString()) {
+        await sendNewCandidateToHR({ hrEmail: hrUser.email, hrName: hrUser.name, candidateName: name, candidateEmail: email, jobTitle, addedByName: req.user.name });
+      }
+    } catch (e) { console.error('❌ Email error (addCandidate):', e.message); }
+
     res.status(201).json({ success: true, data: populated });
 
-    // Fire-and-forget async ATS check — does not block the response
+    // ATS check can still be fire-and-forget (it's a long operation)
     if (resumeText) {
       setImmediate(() => runResumeCheck(candidate._id, resumeText));
     }
-
-    // Fire-and-forget: email BOTH the candidate AND the assigned HR
-    setImmediate(async () => {
-      try {
-        const hrUser = await User.findById(populated.assignedHR?._id || assignedHR);
-        const hrName = hrUser?.name || 'HR Team';
-        const jobTitle = populated.jobId?.title || 'Open Position';
-
-        console.log(`📧 Sending new-candidate emails: candidate=${email}, hr=${hrUser?.email}, job=${jobTitle}`);
-
-        // Email candidate: "Your application has been received"
-        await sendNewCandidateToCandidate({ candidateEmail: email, candidateName: name, jobTitle, hrName });
-
-        // Email assigned HR: "New candidate assigned to you" (skip if HR added it themselves)
-        if (hrUser && hrUser._id.toString() !== req.user._id.toString()) {
-          await sendNewCandidateToHR({ hrEmail: hrUser.email, hrName: hrUser.name, candidateName: name, candidateEmail: email, jobTitle, addedByName: req.user.name });
-        }
-      } catch (e) { console.error('❌ Email error (addCandidate):', e.message); }
-    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
@@ -256,26 +254,22 @@ const updateStage = async (req, res) => {
       return res.status(404).json({ success: false, message: 'Candidate not found' });
     }
 
+    // Send emails BEFORE response (Render free tier kills process after response)
+    try {
+      const hrName = candidate.assignedHR?.name || 'HR Team';
+      const hrEmail = candidate.assignedHR?.email;
+      const jobTitle = candidate.jobId?.title || 'Open Position';
+
+      console.log(`📧 Sending stage-change emails: candidate=${candidate.email}, hr=${hrEmail}, stage=${stage}`);
+
+      await sendStageChangeToCandidate({ candidateEmail: candidate.email, candidateName: candidate.name, jobTitle, newStage: stage, hrName });
+
+      if (hrEmail) {
+        await sendStageChangeToHR({ hrEmail, hrName, candidateName: candidate.name, jobTitle, newStage: stage });
+      }
+    } catch (e) { console.error('❌ Email error (updateStage):', e.message); }
+
     res.json({ success: true, data: candidate });
-
-    // Fire-and-forget: email BOTH the candidate AND the assigned HR about stage change
-    setImmediate(async () => {
-      try {
-        const hrName = candidate.assignedHR?.name || 'HR Team';
-        const hrEmail = candidate.assignedHR?.email;
-        const jobTitle = candidate.jobId?.title || 'Open Position';
-
-        console.log(`📧 Sending stage-change emails: candidate=${candidate.email}, hr=${hrEmail}, stage=${stage}`);
-
-        // Email candidate: "Congratulations! You've moved to [stage]"
-        await sendStageChangeToCandidate({ candidateEmail: candidate.email, candidateName: candidate.name, jobTitle, newStage: stage, hrName });
-
-        // Email assigned HR: "[Candidate] has been moved to [stage]"
-        if (hrEmail) {
-          await sendStageChangeToHR({ hrEmail, hrName, candidateName: candidate.name, jobTitle, newStage: stage });
-        }
-      } catch (e) { console.error('❌ Email error (updateStage):', e.message); }
-    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }
